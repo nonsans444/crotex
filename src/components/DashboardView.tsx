@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, Search, Gamepad2, CheckCircle2, Award, Flame, Bookmark, 
   RotateCcw, Brain, Plus, X, MessageSquare, Clock, ExternalLink, 
-  Trophy, HelpCircle, Play, Check, AlertCircle, Sparkles, RefreshCw, Send, ChevronRight
+  Trophy, HelpCircle, Play, Check, AlertCircle, Sparkles, RefreshCw, Send, ChevronRight,
+  Swords, Activity
 } from 'lucide-react';
 
 // Sound synthesis using Web Audio API for soothing auditory feedback
@@ -138,8 +139,450 @@ const PRE_SEEDED_POSTS: Post[] = [
   }
 ];
 
+// --- CHESS TYPES & DATA ---
+interface ChessPiece {
+  type: 'p' | 'r' | 'n' | 'b' | 'q' | 'k';
+  color: 'w' | 'b';
+}
+
+type ChessBoard = (ChessPiece | null)[][];
+
+interface ChessPuzzle {
+  id: string;
+  name: string;
+  setup: ChessBoard;
+  description: string;
+  correctMove: { from: [number, number]; to: [number, number] };
+  explanation: string;
+}
+
+const CHESS_PUZZLES: ChessPuzzle[] = [
+  {
+    id: "puzzle_smothered",
+    name: "Smothered Checkmate in One",
+    description: "The black King is trapped in the corner by its own pieces. Deliver the final blow with your Knight!",
+    explanation: "The white Knight jumps over the pawn barriers to [1, 5] (F7) checking the King, who has zero escaping routes. Checkmate!",
+    correctMove: { from: [3, 6], to: [1, 5] },
+    setup: [
+      [null, null, null, null, null, null, { type: 'r', color: 'b' }, { type: 'k', color: 'b' }],
+      [null, null, null, null, null, null, { type: 'p', color: 'b' }, { type: 'p', color: 'b' }],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, { type: 'n', color: 'w' }, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, { type: 'k', color: 'w' }, null, null, null]
+    ]
+  },
+  {
+    id: "puzzle_back_rank",
+    name: "Back-Rank Rook Overload",
+    description: "Black's king is trapped behind a wall of its own pawns. Move your Rook to deliver an unstoppable back-rank mate!",
+    explanation: "Sliding the Rook all the way to [0, 0] (A8) attacks the King along the undefended back rank. Checkmate!",
+    correctMove: { from: [7, 0], to: [0, 0] },
+    setup: [
+      [null, null, null, null, { type: 'k', color: 'b' }, null, null, null],
+      [{ type: 'p', color: 'b' }, { type: 'p', color: 'b' }, { type: 'p', color: 'b' }, null, null, { type: 'p', color: 'b' }, { type: 'p', color: 'b' }, { type: 'p', color: 'b' }],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [{ type: 'p', color: 'w' }, { type: 'p', color: 'w' }, { type: 'p', color: 'w' }, null, null, { type: 'p', color: 'w' }, { type: 'p', color: 'w' }, { type: 'p', color: 'w' }],
+      [{ type: 'r', color: 'w' }, null, null, null, { type: 'k', color: 'w' }, null, null, null]
+    ]
+  },
+  {
+    id: "puzzle_fork",
+    name: "Knight Fork Double Attack",
+    description: "Find the key square to fork the black King and black Queen at the same time!",
+    explanation: "Moving the Knight to [2, 2] (C6) simultaneously checks the King at [0, 3] and targets the Queen at [4, 1]. Fork!",
+    correctMove: { from: [4, 3], to: [2, 2] },
+    setup: [
+      [null, null, null, { type: 'k', color: 'b' }, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, { type: 'q', color: 'b' }, null, { type: 'n', color: 'w' }, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, { type: 'k', color: 'w' }, null, null, null]
+    ]
+  }
+];
+
+const createInitialChessBoard = (): ChessBoard => [
+  [
+    { type: 'r', color: 'b' }, { type: 'n', color: 'b' }, { type: 'b', color: 'b' }, { type: 'q', color: 'b' },
+    { type: 'k', color: 'b' }, { type: 'b', color: 'b' }, { type: 'n', color: 'b' }, { type: 'r', color: 'b' }
+  ],
+  Array(8).fill(null).map(() => ({ type: 'p', color: 'b' })),
+  Array(8).fill(null),
+  Array(8).fill(null),
+  Array(8).fill(null),
+  Array(8).fill(null),
+  Array(8).fill(null).map(() => ({ type: 'p', color: 'w' })),
+  [
+    { type: 'r', color: 'w' }, { type: 'n', color: 'w' }, { type: 'b', color: 'w' }, { type: 'q', color: 'w' },
+    { type: 'k', color: 'w' }, { type: 'b', color: 'w' }, { type: 'n', color: 'w' }, { type: 'r', color: 'w' }
+  ]
+];
+
 export default function DashboardView() {
-  const [activeTab, setActiveTab] = useState<'feed' | 'focus' | 'arcade' | 'palace'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'focus' | 'arena' | 'arcade' | 'palace'>('feed');
+
+  // --- CHESS ARENA STATES ---
+  const [chessMode, setChessMode] = useState<'puzzle' | 'sandbox'>('puzzle');
+  const [currentPuzzleIdx, setCurrentPuzzleIdx] = useState(0);
+  const [chessBoard, setChessBoard] = useState<ChessBoard>(() => 
+    JSON.parse(JSON.stringify(CHESS_PUZZLES[0].setup))
+  );
+  const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null);
+  const [chessHistory, setChessHistory] = useState<string[]>([]);
+  const [chessStatus, setChessStatus] = useState<string>('Select a piece to begin.');
+  const [solvedChessPuzzles, setSolvedChessPuzzles] = useState<string[]>([]);
+  const [chessOpponent, setChessOpponent] = useState<'friend' | 'ai'>('ai');
+  const [chessTurn, setChessTurn] = useState<'w' | 'b'>('w');
+
+  // --- N-BACK COGNITIVE STATES ---
+  const [nBackValue, setNBackValue] = useState<number>(2);
+  const [nBackStatus, setNBackStatus] = useState<'idle' | 'running' | 'completed'>('idle');
+  const [nBackSequence, setNBackSequence] = useState<number[]>([]);
+  const [nBackCurrentIndex, setNBackCurrentIndex] = useState<number>(-1);
+  const [nBackActiveCell, setNBackActiveCell] = useState<number | null>(null);
+  const [nBackScore, setNBackScore] = useState({ correct: 0, wrong: 0, totalMatches: 0 });
+  const [userMatchedThisTurn, setUserMatchedThisTurn] = useState(false);
+  const [nBackRoundHistory, setNBackRoundHistory] = useState<string[]>([]);
+
+  // --- DIGIT SPAN WORKING MEMORY STATES ---
+  const [digitSpanMode, setDigitSpanMode] = useState<'forward' | 'backward'>('backward');
+  const [digitSpanStatus, setDigitSpanStatus] = useState<'idle' | 'showing' | 'input' | 'failed' | 'success'>('idle');
+  const [digitSpanSeq, setDigitSpanSeq] = useState<number[]>([]);
+  const [digitSpanShowIdx, setDigitSpanShowIdx] = useState<number>(-1);
+  const [digitSpanInput, setDigitSpanInput] = useState<string>('');
+  const [digitSpanLength, setDigitSpanLength] = useState<number>(4);
+  const [digitSpanStrikes, setDigitSpanStrikes] = useState<number>(3);
+  const [digitSpanBest, setDigitSpanBest] = useState(() => Number(localStorage.getItem('digit_span_best') || 4));
+
+  const nBackIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // --- CHESS ARENA LOGIC ---
+  const triggerAIMove = (board: ChessBoard) => {
+    const blackPieces: { r: number; c: number }[] = [];
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const piece = board[r][c];
+        if (piece && piece.color === 'b') {
+          blackPieces.push({ r, c });
+        }
+      }
+    }
+    if (blackPieces.length === 0) return;
+
+    let moved = false;
+    const shuffled = blackPieces.sort(() => 0.5 - Math.random());
+    for (const p of shuffled) {
+      const piece = board[p.r][p.c]!;
+      const targets: [number, number][] = [];
+      if (piece.type === 'p') {
+        if (p.r + 1 < 8 && !board[p.r + 1][p.c]) targets.push([p.r + 1, p.c]);
+        if (p.r + 1 < 8 && p.c - 1 >= 0 && board[p.r + 1][p.c - 1]?.color === 'w') targets.push([p.r + 1, p.c - 1]);
+        if (p.r + 1 < 8 && p.c + 1 < 8 && board[p.r + 1][p.c + 1]?.color === 'w') targets.push([p.r + 1, p.c + 1]);
+      } else {
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1], [2, 1], [1, 2], [-2, 1]];
+        for (const [dr, dc] of dirs) {
+          const nr = p.r + dr;
+          const nc = p.c + dc;
+          if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+            const targetPiece = board[nr][nc];
+            if (!targetPiece || targetPiece.color === 'w') {
+              targets.push([nr, nc]);
+            }
+          }
+        }
+      }
+
+      if (targets.length > 0) {
+        const target = targets[Math.floor(Math.random() * targets.length)];
+        const nextBoard = board.map(row => [...row]);
+        nextBoard[target[0]][target[1]] = piece;
+        nextBoard[p.r][p.c] = null;
+        setChessBoard(nextBoard);
+        setChessTurn('w');
+        setChessHistory(prev => [...prev, `${piece.type.toUpperCase()}:${p.r},${p.c}→${target[0]},${target[1]}`]);
+        playCalmTone(329.63, 'triangle', 0.12);
+        moved = true;
+        break;
+      }
+    }
+
+    if (!moved) {
+      setChessTurn('w');
+    }
+  };
+
+  const handleChessSquareClick = (r: number, c: number) => {
+    if (chessMode === 'puzzle') {
+      const puzzle = CHESS_PUZZLES[currentPuzzleIdx];
+      const isAlreadySolved = solvedChessPuzzles.includes(puzzle.id);
+      if (isAlreadySolved) return;
+
+      if (!selectedSquare) {
+        const piece = chessBoard[r][c];
+        if (piece && piece.color === 'w') {
+          playCalmTone(440, 'sine', 0.08);
+          setSelectedSquare([r, c]);
+        }
+      } else {
+        const [sr, sc] = selectedSquare;
+        if (sr === r && sc === c) {
+          setSelectedSquare(null);
+          return;
+        }
+
+        const isFromCorrect = sr === puzzle.correctMove.from[0] && sc === puzzle.correctMove.from[1];
+        const isToCorrect = r === puzzle.correctMove.to[0] && c === puzzle.correctMove.to[1];
+
+        if (isFromCorrect && isToCorrect) {
+          const nextBoard = chessBoard.map(row => [...row]);
+          nextBoard[r][c] = nextBoard[sr][sc];
+          nextBoard[sr][sc] = null;
+          setChessBoard(nextBoard);
+          setSelectedSquare(null);
+          
+          setSolvedChessPuzzles(prev => [...prev, puzzle.id]);
+          playCalmTone(523.25, 'sine', 0.1);
+          setTimeout(() => playCalmTone(659.25, 'sine', 0.12), 80);
+          setTimeout(() => playCalmTone(783.99, 'sine', 0.25), 160);
+
+          setChessStatus('✓ Brilliant tactical solution! Focus points achieved.');
+          setUserStats(prev => ({
+            ...prev,
+            points: prev.points + 100,
+            gamesWon: prev.gamesWon + 1
+          }));
+        } else {
+          playCalmTone(200, 'sawtooth', 0.4);
+          setChessStatus('✘ Inaccurate response. Re-analyze the board and try again.');
+          setSelectedSquare(null);
+        }
+      }
+    } else {
+      if (!selectedSquare) {
+        const piece = chessBoard[r][c];
+        if (piece && piece.color === chessTurn) {
+          playCalmTone(440, 'sine', 0.08);
+          setSelectedSquare([r, c]);
+        }
+      } else {
+        const [sr, sc] = selectedSquare;
+        if (sr === r && sc === c) {
+          setSelectedSquare(null);
+          return;
+        }
+
+        const piece = chessBoard[sr][sc]!;
+        const nextBoard = chessBoard.map(row => [...row]);
+        nextBoard[r][c] = piece;
+        nextBoard[sr][sc] = null;
+        setChessBoard(nextBoard);
+        setSelectedSquare(null);
+        
+        playCalmTone(493.88, 'sine', 0.1);
+        setChessHistory(prev => [...prev, `${piece.type.toUpperCase()}:${sr},${sc}→${r},${c}`]);
+
+        if (chessOpponent === 'ai') {
+          setChessTurn('b');
+          setChessStatus('Virtual opponent is calculating counter-strategy...');
+          setTimeout(() => {
+            triggerAIMove(nextBoard);
+            setChessStatus('Your turn. Formulate prefrontal coordination.');
+          }, 1000);
+        } else {
+          setChessTurn(chessTurn === 'w' ? 'b' : 'w');
+          setChessStatus(`Turn: ${chessTurn === 'w' ? 'Black' : 'White'}`);
+        }
+      }
+    }
+  };
+
+  const resetChessSandbox = () => {
+    setChessBoard(createInitialChessBoard());
+    setSelectedSquare(null);
+    setChessTurn('w');
+    setChessHistory([]);
+    setChessStatus('Sandbox initiated. Move any piece to train strategic depth.');
+    playCalmTone(392, 'sine', 0.12);
+  };
+
+  const loadChessPuzzle = (idx: number) => {
+    setCurrentPuzzleIdx(idx);
+    setChessBoard(JSON.parse(JSON.stringify(CHESS_PUZZLES[idx].setup)));
+    setSelectedSquare(null);
+    setChessStatus('Study the board coordinate. Deliver the winning focus blow.');
+    playCalmTone(440, 'sine', 0.1);
+  };
+
+  // --- N-BACK COGNITIVE SCIENCE LOGIC ---
+  const startNBackGame = () => {
+    if (nBackIntervalRef.current) clearTimeout(nBackIntervalRef.current);
+    const seqLength = 15;
+    const newSeq: number[] = [];
+    for (let i = 0; i < seqLength; i++) {
+      if (i >= nBackValue && Math.random() < 0.35) {
+        newSeq.push(newSeq[i - nBackValue]);
+      } else {
+        newSeq.push(Math.floor(Math.random() * 9));
+      }
+    }
+
+    setNBackSequence(newSeq);
+    setNBackStatus('running');
+    setNBackCurrentIndex(0);
+    setNBackScore({ correct: 0, wrong: 0, totalMatches: countNBackMatches(newSeq, nBackValue) });
+    setUserMatchedThisTurn(false);
+    setNBackRoundHistory([]);
+    playCalmTone(523.25, 'sine', 0.2);
+
+    runNBackStep(0, newSeq);
+  };
+
+  const countNBackMatches = (seq: number[], n: number) => {
+    let count = 0;
+    for (let i = n; i < seq.length; i++) {
+      if (seq[i] === seq[i - n]) count++;
+    }
+    return count;
+  };
+
+  const runNBackStep = (index: number, seq: number[]) => {
+    if (index >= seq.length) {
+      setNBackStatus('completed');
+      setNBackActiveCell(null);
+      return;
+    }
+
+    setNBackCurrentIndex(index);
+    setNBackActiveCell(seq[index]);
+    setUserMatchedThisTurn(false);
+
+    const frequencies = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33];
+    playCalmTone(frequencies[seq[index]], 'sine', 0.2);
+
+    setTimeout(() => {
+      setNBackActiveCell(null);
+    }, 1300);
+
+    nBackIntervalRef.current = setTimeout(() => {
+      if (index >= nBackValue && seq[index] === seq[index - nBackValue] && !userMatchedThisTurn) {
+        setNBackScore(prev => ({ ...prev, wrong: prev.wrong + 1 }));
+        setNBackRoundHistory(prev => [...prev, `Turn ${index + 1}: Missed Match`]);
+      }
+      runNBackStep(index + 1, seq);
+    }, 2200);
+  };
+
+  const handleNBackMatchClick = () => {
+    if (nBackStatus !== 'running' || userMatchedThisTurn) return;
+    setUserMatchedThisTurn(true);
+
+    const isMatch = nBackCurrentIndex >= nBackValue && nBackSequence[nBackCurrentIndex] === nBackSequence[nBackCurrentIndex - nBackValue];
+    if (isMatch) {
+      setNBackScore(prev => ({ ...prev, correct: prev.correct + 1 }));
+      setNBackRoundHistory(prev => [...prev, `Turn ${nBackCurrentIndex + 1}: Perfect Match (+15cp)`]);
+      playCalmTone(659.25, 'sine', 0.15);
+      
+      setUserStats(prev => ({
+        ...prev,
+        points: prev.points + 15
+      }));
+    } else {
+      setNBackScore(prev => ({ ...prev, wrong: prev.wrong + 1 }));
+      setNBackRoundHistory(prev => [...prev, `Turn ${nBackCurrentIndex + 1}: False Alarm (-5cp)`]);
+      playCalmTone(220, 'sawtooth', 0.25);
+      
+      setUserStats(prev => ({
+        ...prev,
+        points: Math.max(0, prev.points - 5)
+      }));
+    }
+  };
+
+  // --- DIGIT SPAN LOGIC ---
+  const startDigitSpanGame = () => {
+    setDigitSpanStrikes(3);
+    setDigitSpanLength(4);
+    setDigitSpanStatus('showing');
+    generateDigitSpanRound(4);
+  };
+
+  const generateDigitSpanRound = (length: number) => {
+    setDigitSpanStatus('showing');
+    setDigitSpanInput('');
+    const newSeq = Array.from({ length }, () => Math.floor(Math.random() * 10));
+    setDigitSpanSeq(newSeq);
+    
+    let idx = 0;
+    setDigitSpanShowIdx(0);
+    playCalmTone(349.23, 'sine', 0.15);
+
+    const interval = setInterval(() => {
+      idx++;
+      if (idx >= length) {
+        clearInterval(interval);
+        setTimeout(() => {
+          setDigitSpanShowIdx(-1);
+          setDigitSpanStatus('input');
+        }, 1000);
+      } else {
+        setDigitSpanShowIdx(idx);
+        playCalmTone(349.23 + idx * 30, 'sine', 0.15);
+      }
+    }, 1200);
+  };
+
+  const submitDigitSpanAnswer = () => {
+    const trimmed = digitSpanInput.replace(/\s+/g, '');
+    let expected = digitSpanSeq.join('');
+    if (digitSpanMode === 'backward') {
+      expected = [...digitSpanSeq].reverse().join('');
+    }
+
+    if (trimmed === expected) {
+      playCalmTone(523.25, 'sine', 0.1);
+      setTimeout(() => playCalmTone(659.25, 'sine', 0.2), 100);
+      
+      const nextLen = digitSpanLength + 1;
+      setDigitSpanLength(nextLen);
+      
+      if (nextLen - 1 > digitSpanBest) {
+        setDigitSpanBest(nextLen - 1);
+        localStorage.setItem('digit_span_best', String(nextLen - 1));
+      }
+
+      setUserStats(prev => ({
+        ...prev,
+        points: prev.points + 30,
+        gamesWon: prev.gamesWon + 1
+      }));
+
+      setTimeout(() => {
+        generateDigitSpanRound(nextLen);
+      }, 1500);
+    } else {
+      playCalmTone(200, 'sawtooth', 0.4);
+      const newStrikes = digitSpanStrikes - 1;
+      setDigitSpanStrikes(newStrikes);
+
+      if (newStrikes <= 0) {
+        setDigitSpanStatus('failed');
+      } else {
+        setDigitSpanStatus('showing');
+        setTimeout(() => {
+          generateDigitSpanRound(digitSpanLength);
+        }, 1500);
+      }
+    }
+  };
   
   // State for Social Feed & Wiki search
   const [posts, setPosts] = useState<Post[]>(PRE_SEEDED_POSTS);
@@ -846,6 +1289,18 @@ export default function DashboardView() {
           </button>
 
           <button
+            onClick={() => { playCalmTone(622.25, 'sine', 0.05); setActiveTab('arena'); }}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'arena'
+                ? 'bg-[#dfb15b] text-[#0c100e] shadow-[0_4px_12px_rgba(223,177,91,0.2)] font-black'
+                : 'text-[#879b90] hover:bg-[#1c2420] hover:text-[#f1ede2]'
+            }`}
+          >
+            <Swords className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline">Focus Arena</span>
+          </button>
+
+          <button
             onClick={() => { playCalmTone(659.25, 'sine', 0.05); setActiveTab('arcade'); }}
             className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
               activeTab === 'arcade'
@@ -1348,6 +1803,448 @@ export default function DashboardView() {
                       WORD FILTERING ENGAGEMENT ACTIVE
                     </div>
                   )}
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
+
+        {/* ==========================================
+            TAB 2.5: FOCUS ARENA (Chess & Working Memory Tasks)
+            ========================================== */}
+        {activeTab === 'arena' && (
+          <div className="max-w-5xl mx-auto space-y-6">
+            
+            {/* Header banner */}
+            <div className="bg-[#141a17] p-6 rounded-2xl border border-[#222d26] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
+                  <Swords className="w-4 h-4 text-[#dfb15b]" />
+                  <span>Cortex Focus Arena</span>
+                </div>
+                <h1 className="text-xl md:text-2xl font-black text-[#f1ede2] tracking-tight font-sans">
+                  Prefrontal Attention & Strategy Arena
+                </h1>
+                <p className="text-xs text-[#879b90] leading-relaxed max-w-2xl">
+                  Re-engineer your neural circuits. Cortex pits selective concentration, spatial foresight, and executive recall against simulated digital distractions.
+                </p>
+              </div>
+              <div className="px-4 py-2 bg-black/30 border border-[#222d26] rounded-xl flex items-center gap-2 font-mono text-[10px] text-[#dfb15b]">
+                <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span>COGNITIVE ENGAGEMENT: MAXIMAL</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              
+              {/* PANEL 1: INTERACTIVE CHESS ARENA (cols-span-7) */}
+              <div className="lg:col-span-7 bg-[#141a17] border border-[#222d26] rounded-2xl p-5 space-y-4 flex flex-col justify-between min-h-[580px]">
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-[10px] font-mono text-[#879b90]">
+                    <span className="uppercase font-bold text-[#dfb15b]">♟️ INTELLECTUAL COMBAT</span>
+                    <span className="text-emerald-400 font-bold uppercase font-mono">REWARDS: +100 CP</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-bold text-[#f1ede2]">
+                      {chessMode === 'puzzle' ? 'Strategic Chess Puzzles' : 'Cognitive Chess Sandbox'}
+                    </h2>
+
+                    {/* Mode selector */}
+                    <div className="flex gap-1.5 bg-black/30 p-1 border border-[#222d26] rounded-md font-mono text-[9px] uppercase">
+                      <button
+                        onClick={() => { playCalmTone(440, 'sine', 0.05); setChessMode('puzzle'); loadChessPuzzle(0); }}
+                        className={`px-2 py-0.5 font-bold rounded cursor-pointer ${
+                          chessMode === 'puzzle' ? 'bg-[#dfb15b] text-[#0c100e]' : 'text-[#879b90]'
+                        }`}
+                      >
+                        Puzzles
+                      </button>
+                      <button
+                        onClick={() => { playCalmTone(440, 'sine', 0.05); setChessMode('sandbox'); resetChessSandbox(); }}
+                        className={`px-2 py-0.5 font-bold rounded cursor-pointer ${
+                          chessMode === 'sandbox' ? 'bg-[#dfb15b] text-[#0c100e]' : 'text-[#879b90]'
+                        }`}
+                      >
+                        Sandbox
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main Interactive Board & Status */}
+                <div className="flex-1 flex flex-col items-center justify-center py-4 space-y-4">
+                  
+                  {/* Chess Board Grid */}
+                  <div className="flex flex-col items-center select-none">
+                    <div className="grid grid-cols-8 gap-0 border-4 border-[#2c3931] rounded-xl overflow-hidden shadow-2xl">
+                      {chessBoard.map((row, rIdx) => 
+                        row.map((piece, cIdx) => {
+                          const isDark = (rIdx + cIdx) % 2 === 1;
+                          const isSelected = selectedSquare && selectedSquare[0] === rIdx && selectedSquare[1] === cIdx;
+                          let tileColor = isDark ? 'bg-[#1c2420]' : 'bg-[#28352d]';
+                          if (isSelected) tileColor = 'bg-[#dfb15b]/30 ring-2 ring-inset ring-[#dfb15b]';
+
+                          // Render pieces unicode helper inside visual cell
+                          const renderPiece = (p: ChessPiece) => {
+                            const symbols: Record<string, string> = {
+                              'w-p': '♙', 'w-r': '♖', 'w-n': '♘', 'w-b': '♗', 'w-q': '♕', 'w-k': '♔',
+                              'b-p': '♟', 'b-r': '♜', 'b-n': '♞', 'b-b': '♝', 'b-q': '♛', 'b-k': '♚',
+                            };
+                            const key = `${p.color}-${p.type}`;
+                            const isWhite = p.color === 'w';
+                            return (
+                              <span className={`text-2xl sm:text-3xl font-normal select-none transition-all ${
+                                isWhite ? 'text-[#dfb15b] drop-shadow-[0_2px_4px_rgba(223,177,91,0.35)]' : 'text-[#879b90] drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]'
+                              }`}>
+                                {symbols[key] || ''}
+                              </span>
+                            );
+                          };
+
+                          return (
+                            <button
+                              key={`${rIdx}-${cIdx}`}
+                              onClick={() => handleChessSquareClick(rIdx, cIdx)}
+                              className={`w-9 h-9 sm:w-11 sm:h-11 flex items-center justify-center transition-all relative focus:outline-none cursor-pointer ${tileColor}`}
+                            >
+                              {piece && renderPiece(piece)}
+
+                              {/* Labels */}
+                              {cIdx === 0 && (
+                                <span className="absolute top-0.5 left-0.5 text-[7px] font-mono font-bold text-[#879b90]/40">
+                                  {8 - rIdx}
+                                </span>
+                              )}
+                              {rIdx === 7 && (
+                                <span className="absolute bottom-0.5 right-0.5 text-[7px] font-mono font-bold text-[#879b90]/40">
+                                  {String.fromCharCode(97 + cIdx)}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Status Banner */}
+                  <div className="w-full bg-black/20 border border-[#2c3a32] rounded-xl px-4 py-2.5 text-center text-xs font-mono">
+                    <span className="text-[#879b90]">STATUS: </span>
+                    <span className="text-[#dfb15b] font-bold">{chessStatus}</span>
+                  </div>
+                </div>
+
+                {/* Dashboard Controls for Puzzles / Sandbox */}
+                <div className="pt-3 border-t border-[#222d26] space-y-3">
+                  {chessMode === 'puzzle' ? (
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-mono text-[#879b90] uppercase">Available Challenges:</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {CHESS_PUZZLES.map((puzzle, idx) => {
+                          const isSolved = solvedChessPuzzles.includes(puzzle.id);
+                          const isCurrent = currentPuzzleIdx === idx;
+                          return (
+                            <button
+                              key={puzzle.id}
+                              onClick={() => loadChessPuzzle(idx)}
+                              className={`py-1.5 px-2 text-[10px] rounded-lg border font-bold transition-all text-left truncate flex items-center justify-between cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-[#dfb15b] text-[#0c100e] border-[#dfb15b]'
+                                  : 'bg-[#1c2420] text-[#f1ede2] border-[#2c3931] hover:bg-[#25302a]'
+                              }`}
+                            >
+                              <span className="truncate">{puzzle.name}</span>
+                              {isSolved && <span className="text-emerald-500 font-bold shrink-0 pl-1">✓</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-[#879b90] leading-normal italic bg-black/15 p-2 rounded border border-white/5">
+                        💡 <strong>Tactic Clue:</strong> {CHESS_PUZZLES[currentPuzzleIdx].description}
+                        {solvedChessPuzzles.includes(CHESS_PUZZLES[currentPuzzleIdx].id) && (
+                          <span className="block mt-1 text-emerald-400 font-sans font-normal not-italic">
+                            ✓ Solved: {CHESS_PUZZLES[currentPuzzleIdx].explanation}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 font-mono">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={resetChessSandbox}
+                          className="px-3 py-1.5 bg-[#1c2420] border border-[#2c3931] hover:border-[#dfb15b]/40 text-[#dfb15b] text-[10px] font-bold uppercase rounded-lg cursor-pointer"
+                        >
+                          Reset Board
+                        </button>
+                        <div className="text-[10px] text-[#879b90]">
+                          Opponent:
+                          <button
+                            onClick={() => {
+                              playCalmTone(350, 'sine', 0.05);
+                              setChessOpponent(prev => prev === 'ai' ? 'friend' : 'ai');
+                            }}
+                            className="ml-1.5 text-[#dfb15b] font-bold hover:underline"
+                          >
+                            {chessOpponent === 'ai' ? '🤖 Virtual AI' : '👥 Hotseat Friend'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="text-[9px] text-[#879b90] truncate max-w-xs">
+                        {chessHistory.length > 0 ? (
+                          <span>MOVES: {chessHistory.slice(-3).join(', ')}</span>
+                        ) : (
+                          <span>MOVE PIECES FREELY IN SANDBOX</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* PANEL 2: COGNITIVE CHALLENGES HUB (cols-span-5) */}
+              <div className="lg:col-span-5 space-y-6">
+                
+                {/* DUAL COGNITIVE TRAINERS */}
+                <div className="bg-[#141a17] border border-[#222d26] rounded-2xl p-5 space-y-4 flex flex-col justify-between min-h-[580px]">
+                  
+                  {/* Internal tabs for memory tasks */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[10px] font-mono text-[#879b90]">
+                      <span className="uppercase font-bold text-[#dfb15b]">⚛️ WORKING MEMORY TRAINERS</span>
+                      <span className="text-emerald-400 font-bold font-mono">LEVELS: SCALABLE</span>
+                    </div>
+
+                    <div className="flex gap-1.5 bg-black/20 p-1 rounded-lg border border-[#222d26] font-mono text-[9px] uppercase mt-2">
+                      <button
+                        onClick={() => { playCalmTone(440, 'sine', 0.05); setNBackValue(2); }}
+                        className={`flex-1 py-1 font-bold rounded text-center cursor-pointer ${
+                          nBackValue > 0 ? 'bg-[#dfb15b] text-[#0c100e]' : 'text-[#879b90]'
+                        }`}
+                      >
+                        Visual N-Back (N={nBackValue})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* N-BACK GAME CONTAINER */}
+                  <div className="flex-1 flex flex-col justify-between py-2 space-y-4 select-none">
+                    
+                    <div className="space-y-1 text-center">
+                      <h3 className="text-xs font-bold text-[#f1ede2] font-mono">Visual Position Recaller</h3>
+                      <p className="text-[10px] text-[#879b90] leading-relaxed max-w-xs mx-auto">
+                        Identify if the flashing tile location matches the cell highlighted exactly <strong>{nBackValue} turn(s) ago</strong>.
+                      </p>
+                    </div>
+
+                    {/* 3x3 Flashing Grid */}
+                    <div className="grid grid-cols-3 gap-2 bg-black/20 p-3 border border-[#2c3a32] rounded-xl w-44 h-44 mx-auto">
+                      {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((idx) => {
+                        const isHighlighted = nBackActiveCell === idx;
+                        return (
+                          <div
+                            key={idx}
+                            className={`rounded-lg border transition-all duration-150 ${
+                              isHighlighted
+                                ? 'bg-[#dfb15b] border-[#dfb15b] shadow-[0_0_15px_#dfb15b] scale-102'
+                                : 'bg-[#1c2420] border-[#2c3931]'
+                            }`}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    {/* Stats Display */}
+                    {nBackStatus !== 'idle' && (
+                      <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-center max-w-xs mx-auto w-full">
+                        <div className="bg-[#1c2420] p-1.5 rounded border border-[#2c3931]">
+                          <span className="text-[#879b90] block">ACCURACY</span>
+                          <span className="text-[#dfb15b] font-bold text-xs">{nBackScore.correct} / {nBackScore.correct + nBackScore.wrong}</span>
+                        </div>
+                        <div className="bg-[#1c2420] p-1.5 rounded border border-[#2c3931]">
+                          <span className="text-[#879b90] block">SEQUENCE</span>
+                          <span className="text-[#f1ede2] font-bold text-xs">{(nBackCurrentIndex + 1)} / 15</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Controls & Match Trigger */}
+                    <div className="space-y-2 max-w-xs mx-auto w-full">
+                      {nBackStatus === 'idle' ? (
+                        <div className="space-y-2">
+                          <div className="flex gap-2 justify-center">
+                            {[1, 2, 3].map((val) => (
+                              <button
+                                key={val}
+                                onClick={() => { playCalmTone(350 + val * 50, 'sine', 0.05); setNBackValue(val); }}
+                                className={`px-2 py-1 text-[9px] font-mono font-black border rounded cursor-pointer ${
+                                  nBackValue === val
+                                    ? 'bg-[#dfb15b] text-[#0c100e] border-[#dfb15b]'
+                                    : 'border-[#2c3931] text-[#879b90] hover:text-[#f1ede2]'
+                                }`}
+                              >
+                                N = {val}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={startNBackGame}
+                            className="w-full py-2 bg-[#dfb15b] hover:bg-[#e6c17e] text-[#0c100e] text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                          >
+                            Begin N-Back Attention Routine
+                          </button>
+                        </div>
+                      ) : nBackStatus === 'running' ? (
+                        <button
+                          onClick={handleNBackMatchClick}
+                          disabled={userMatchedThisTurn}
+                          className={`w-full py-3 text-xs font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                            userMatchedThisTurn
+                              ? 'bg-[#1c2420] text-[#879b90] border-[#2c3931]'
+                              : 'bg-[#dfb15b] hover:bg-[#e6c17e] text-[#0c100e] border-[#dfb15b] shadow-[0_4px_12px_rgba(223,177,91,0.2)]'
+                          }`}
+                        >
+                          ⚡ POSITION MATCHES !
+                        </button>
+                      ) : (
+                        <div className="space-y-1.5 text-center font-mono">
+                          <span className="text-emerald-400 font-bold block text-xs">✓ DUAL N-BACK COMPLETED</span>
+                          <p className="text-[10px] text-[#879b90]">Perfect hits: {nBackScore.correct} | Errors/Misses: {nBackScore.wrong}</p>
+                          <button
+                            onClick={startNBackGame}
+                            className="w-full mt-1.5 py-1.5 bg-[#1c2420] text-[#dfb15b] border border-[#2c3931] hover:border-[#dfb15b]/40 rounded-lg text-[10px] font-black uppercase cursor-pointer"
+                          >
+                            Train Again
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
+                  {/* DIGIT SPAN SEQUENTIAL WORKING MEMORY BLOCK */}
+                  <div className="pt-4 border-t border-[#222d26] space-y-3">
+                    <div className="flex justify-between items-center text-[10px] font-mono text-[#879b90]">
+                      <span className="uppercase font-bold text-[#dfb15b]">🔢 DIGIT SPAN SEQUENCER</span>
+                      <span className="font-bold">BEST: {digitSpanBest} DIGITS</span>
+                    </div>
+
+                    <p className="text-[10px] text-[#879b90] leading-normal max-w-sm">
+                      Numbers will flash one by one. Replicate the numbers in <strong className="text-rose-300">REVERSE order</strong> (Backward Span) to activate executive prefrontal coordination.
+                    </p>
+
+                    {/* Interactive Arena Screen */}
+                    <div className="bg-black/25 rounded-xl border border-[#2c3a32] p-4 min-h-[140px] flex flex-col items-center justify-center relative overflow-hidden select-none">
+                      
+                      {digitSpanStatus === 'idle' && (
+                        <div className="text-center space-y-3">
+                          <div className="flex gap-1 bg-black/30 p-1 border border-[#2c3931] rounded font-mono text-[8px] uppercase inline-flex">
+                            <button
+                              onClick={() => { playCalmTone(300, 'sine', 0.05); setDigitSpanMode('forward'); }}
+                              className={`px-1.5 py-0.5 rounded ${digitSpanMode === 'forward' ? 'bg-[#dfb15b] text-[#0c100e]' : 'text-[#879b90]'}`}
+                            >
+                              Forward
+                            </button>
+                            <button
+                              onClick={() => { playCalmTone(300, 'sine', 0.05); setDigitSpanMode('backward'); }}
+                              className={`px-1.5 py-0.5 rounded ${digitSpanMode === 'backward' ? 'bg-[#dfb15b] text-[#0c100e]' : 'text-[#879b90]'}`}
+                            >
+                              Backward
+                            </button>
+                          </div>
+                          <div>
+                            <button
+                              onClick={startDigitSpanGame}
+                              className="px-4 py-2 bg-[#dfb15b] text-[#0c100e] text-[10px] font-black uppercase rounded-lg cursor-pointer"
+                            >
+                              Activate Digit Span test
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {digitSpanStatus === 'showing' && (
+                        <div className="text-center space-y-2 animate-pulse">
+                          <span className="text-[9px] uppercase font-mono tracking-widest text-[#879b90] block">MEMORIZE</span>
+                          <span className="text-5xl font-black font-mono text-[#dfb15b]">
+                            {digitSpanShowIdx >= 0 ? digitSpanSeq[digitSpanShowIdx] : ''}
+                          </span>
+                        </div>
+                      )}
+
+                      {digitSpanStatus === 'input' && (
+                        <div className="text-center space-y-3 w-full max-w-[200px]">
+                          <span className="text-[9px] uppercase font-mono tracking-widest text-[#879b90] block">
+                            TYPE IN {digitSpanMode === 'backward' ? 'REVERSE' : 'NORMAL'} ORDER
+                          </span>
+                          
+                          <input
+                            type="text"
+                            maxLength={digitSpanLength}
+                            placeholder="Enter numbers..."
+                            value={digitSpanInput}
+                            onChange={(e) => setDigitSpanInput(e.target.value.replace(/\D/g, ''))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') submitDigitSpanAnswer();
+                            }}
+                            className="w-full bg-black/30 border border-[#2c3a32] focus:border-[#dfb15b]/40 rounded-lg py-1.5 text-center font-mono font-bold text-[#dfb15b] tracking-widest placeholder-[#879b90]/25 focus:outline-none text-sm"
+                            autoFocus
+                          />
+
+                          <button
+                            onClick={submitDigitSpanAnswer}
+                            className="w-full py-1.5 bg-[#1c2420] hover:bg-[#25302a] text-[#dfb15b] border border-[#2c3931] hover:border-[#dfb15b]/40 text-[9px] font-bold uppercase rounded-lg cursor-pointer"
+                          >
+                            Verify Sequence
+                          </button>
+                        </div>
+                      )}
+
+                      {digitSpanStatus === 'failed' && (
+                        <div className="text-center space-y-2">
+                          <span className="text-rose-400 font-bold font-mono block text-xs">✘ EXECUTIVE CAPACITANCE BREACH</span>
+                          <p className="text-[10px] text-[#879b90]">Max level solved: <strong className="text-[#f1ede2]">{digitSpanLength - 1} digits</strong></p>
+                          <button
+                            onClick={startDigitSpanGame}
+                            className="mt-1.5 px-3 py-1 bg-[#1c2420] hover:bg-[#25302a] text-[#dfb15b] border border-[#2c3931] text-[9px] font-bold uppercase rounded-lg cursor-pointer"
+                          >
+                            Re-engage Sequencer
+                          </button>
+                        </div>
+                      )}
+
+                    </div>
+
+                    {/* Digit Span Status Board */}
+                    {digitSpanStatus !== 'idle' && (
+                      <div className="flex justify-between items-center text-[9px] font-mono font-bold select-none">
+                        <span className="text-[#879b90]">CURRENT SPAN: {digitSpanLength} DIGITS</span>
+                        <div className="flex gap-1">
+                          {Array.from({ length: 3 }).map((_, i) => (
+                            <div 
+                              key={i} 
+                              className={`w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold text-[8px] border ${
+                                i < digitSpanStrikes 
+                                  ? 'bg-[#dfb15b]/10 text-[#dfb15b] border-[#dfb15b]/30' 
+                                  : 'bg-rose-950/10 text-rose-400 border-rose-950'
+                              }`}
+                            >
+                              ♥
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+
                 </div>
 
               </div>
