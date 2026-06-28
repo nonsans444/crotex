@@ -622,43 +622,67 @@ export default function DashboardView() {
 
   const currentLevel = getLevelName(userStats.points);
 
-  // Auto-updating feed on mount: Load fresh random Wikipedia entries!
+  // State for loading trending feed from our service layer
+  const [isRefreshingFeed, setIsRefreshingFeed] = useState(false);
+
+  // Auto-updating feed on mount: Load fresh random Wikipedia entries from service layer!
   useEffect(() => {
     autoUpdateFeed();
   }, []);
 
   const autoUpdateFeed = async () => {
-    // Pick 2 random topics from our curated list
-    const shuffled = [...CURATED_TOPICS].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, 2);
-    
-    for (const topic of selected) {
-      if (!posts.some(p => p.title.toLowerCase() === topic.toLowerCase())) {
-        try {
-          const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`);
-          if (res.ok) {
-            const data = await res.json();
-            const newPost: Post = {
-              id: `wiki_${data.pageid || Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-              title: data.title,
-              description: data.description || "Trusted educational subject.",
-              extract: data.extract,
-              thumbnailUrl: data.thumbnail?.source || undefined,
-              source: "Wikipedia",
-              sourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${topic}`,
-              readingTimeMin: Math.max(1, Math.ceil(data.extract.split(" ").length / 150)),
-              cognitiveLoad: 4,
-              quiz: generateQuizForWiki(data.title, data.extract),
-              comments: [
-                { id: `c_${Date.now()}_1`, author: "Cortex Scholar", avatar: "CS", text: `I love analyzing ${data.title}. Truly high signal-to-noise ratio!`, timestamp: "Just now", likes: 2 }
-              ]
-            };
-            setPosts(prev => [newPost, ...prev]);
+    setIsRefreshingFeed(true);
+    try {
+      const res = await fetch("/api/wiki/trending-posts");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.posts && Array.isArray(data.posts)) {
+          // Add them, filtering out any that are already in our feed to prevent duplicates
+          setPosts(prev => {
+            const newPosts = data.posts.filter(
+              (newP: Post) => !prev.some(p => p.title.toLowerCase() === newP.title.toLowerCase())
+            );
+            return [...newPosts, ...prev];
+          });
+        }
+      } else {
+        // Fallback to client-side direct Wikipedia summary fetch if service layer is temporarily offline
+        const shuffled = [...CURATED_TOPICS].sort(() => 0.5 - Math.random());
+        const selected = shuffled.slice(0, 2);
+        
+        for (const topic of selected) {
+          if (!posts.some(p => p.title.toLowerCase() === topic.toLowerCase())) {
+            try {
+              const directRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`);
+              if (directRes.ok) {
+                const data = await directRes.json();
+                const newPost: Post = {
+                  id: `wiki_${data.pageid || Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                  title: data.title,
+                  description: data.description || "Trusted educational subject.",
+                  extract: data.extract,
+                  thumbnailUrl: data.thumbnail?.source || undefined,
+                  source: "Wikipedia",
+                  sourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${topic}`,
+                  readingTimeMin: Math.max(1, Math.ceil(data.extract.split(" ").length / 150)),
+                  cognitiveLoad: 4,
+                  quiz: generateQuizForWiki(data.title, data.extract),
+                  comments: [
+                    { id: `c_${Date.now()}_1`, author: "Cortex Scholar", avatar: "CS", text: `I love analyzing ${data.title}. Truly high signal-to-noise ratio!`, timestamp: "Just now", likes: 2 }
+                  ]
+                };
+                setPosts(prev => [newPost, ...prev]);
+              }
+            } catch (innerErr) {
+              console.error("Direct fetch fallback failed:", innerErr);
+            }
           }
-        } catch (e) {
-          console.error("Failed to fetch auto-feed wiki:", e);
         }
       }
+    } catch (e) {
+      console.error("Failed to fetch trending posts from service layer:", e);
+    } finally {
+      setIsRefreshingFeed(false);
     }
   };
 
@@ -712,7 +736,7 @@ export default function DashboardView() {
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
   const [solvedQuizzes, setSolvedQuizzes] = useState<Record<string, { selected: number; correct: boolean }>>({});
 
-  // Search Wikipedia directly using Wikipedia API
+  // Search Wikipedia directly using Wikipedia API and enhance using server-side Gemini Service Layer
   const handleWikiSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -754,6 +778,35 @@ export default function DashboardView() {
         return;
       }
 
+      // 3. Request high-quality, AI-powered enhancement from our backend service layer
+      let enhancement = null;
+      try {
+        const enhanceRes = await fetch("/api/wiki/enhance", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            title: data.title,
+            extract: data.extract
+          })
+        });
+        if (enhanceRes.ok) {
+          enhancement = await enhanceRes.json();
+        }
+      } catch (err) {
+        console.warn("Service layer enhancement failed, relying on offline fallback metrics:", err);
+      }
+
+      const finalQuiz = enhancement?.quiz || generateQuizForWiki(data.title, data.extract);
+      const finalComments = enhancement?.comments?.map((c: any, idx: number) => ({
+        id: `c_gen_${Date.now()}_${idx}`,
+        ...c
+      })) || [
+        { id: `c_gen_${Date.now()}`, author: "Library Archiver", avatar: "LA", text: `I love that we can index ${data.title} live. Thanks for keeping the feed dynamic!`, timestamp: "Just now", likes: 1 }
+      ];
+      const finalCognitiveLoad = enhancement?.cognitiveLoad || 5;
+
       const newPost: Post = {
         id: `wiki_${data.pageid || Date.now()}`,
         title: data.title,
@@ -763,11 +816,9 @@ export default function DashboardView() {
         source: "Wikipedia",
         sourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(topTitle)}`,
         readingTimeMin: Math.max(1, Math.ceil(data.extract.split(" ").length / 150)),
-        cognitiveLoad: 5,
-        quiz: generateQuizForWiki(data.title, data.extract),
-        comments: [
-          { id: `c_gen_${Date.now()}`, author: "Library Archiver", avatar: "LA", text: `I love that we can index ${data.title} live. Thanks for keeping the feed dynamic!`, timestamp: "Just now", likes: 1 }
-        ]
+        cognitiveLoad: finalCognitiveLoad,
+        quiz: finalQuiz,
+        comments: finalComments
       };
 
       setPosts(prev => [newPost, ...prev]);
@@ -1358,10 +1409,11 @@ export default function DashboardView() {
 
               <button
                 onClick={() => { playCalmTone(523, 'sine', 0.2); autoUpdateFeed(); }}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[#1c2420] hover:bg-[#25302a] text-[#dfb15b] text-[10px] font-bold uppercase tracking-wider rounded-lg border border-[#34443a] transition-all cursor-pointer"
+                disabled={isRefreshingFeed}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#1c2420] hover:bg-[#25302a] disabled:opacity-50 text-[#dfb15b] text-[10px] font-bold uppercase tracking-wider rounded-lg border border-[#34443a] transition-all cursor-pointer"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Refresh Feed</span>
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingFeed ? 'animate-spin text-emerald-400' : ''}`} />
+                <span>{isRefreshingFeed ? 'Refreshing...' : 'Refresh Feed'}</span>
               </button>
             </div>
 
