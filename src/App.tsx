@@ -1,10 +1,13 @@
 import React from 'react';
 import DashboardView from './components/DashboardView';
+import StarfieldBackground from './components/StarfieldBackground';
 import { Sparkles, Brain } from 'lucide-react';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-[#0c100e] text-[#f1ede2] flex flex-col font-sans selection:bg-[#dfb15b]/30 selection:text-white">
+    <div className="min-h-screen bg-[#0c100e] text-[#f1ede2] flex flex-col font-sans selection:bg-[#dfb15b]/30 selection:text-white relative">
+      {/* Dynamic Starfield Background */}
+      <StarfieldBackground />
       
       {/* Immersive Theme Navigation & Mind Balance Rail */}
       <nav className="h-14 border-b border-[#222d26] flex items-center justify-between px-6 bg-[#141a17]/60 backdrop-blur-md shrink-0 select-none">

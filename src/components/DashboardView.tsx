@@ -3,8 +3,15 @@ import {
   BookOpen, Search, Gamepad2, CheckCircle2, Award, Flame, Bookmark, 
   RotateCcw, Brain, Plus, X, MessageSquare, Clock, ExternalLink, 
   Trophy, HelpCircle, Play, Check, AlertCircle, Sparkles, RefreshCw, Send, ChevronRight,
-  Swords, Activity
+  Swords, Activity, LayoutGrid
 } from 'lucide-react';
+import { 
+  ReflexGridGame, 
+  SocraticInquiry, 
+  SkillSwap, 
+  CreativeSandbox, 
+  QuietRoomGuide 
+} from './AntiBrainrotFeatures';
 
 // Sound synthesis using Web Audio API for soothing auditory feedback
 const playCalmTone = (freq: number, type: OscillatorType = 'sine', duration: number = 0.15) => {
@@ -228,7 +235,11 @@ const createInitialChessBoard = (): ChessBoard => [
 ];
 
 export default function DashboardView() {
-  const [activeTab, setActiveTab] = useState<'feed' | 'focus' | 'arena' | 'arcade' | 'palace'>('feed');
+  const [activeTab, setActiveTab] = useState<'overview' | 'feed' | 'focus' | 'arena' | 'arcade' | 'palace'>('overview');
+  const [feedSubTab, setFeedSubTab] = useState<'slow-news' | 'philosophy'>('slow-news');
+  const [focusSubTab, setFocusSubTab] = useState<'gym' | 'quiet'>('gym');
+  const [arcadeSubTab, setArcadeSubTab] = useState<'strategy' | 'reflex'>('strategy');
+  const [palaceSubTab, setPalaceSubTab] = useState<'sandbox' | 'skillswap' | 'vault'>('sandbox');
 
   // --- CHESS ARENA STATES ---
   const [chessMode, setChessMode] = useState<'puzzle' | 'sandbox'>('puzzle');
@@ -621,6 +632,20 @@ export default function DashboardView() {
   };
 
   const currentLevel = getLevelName(userStats.points);
+
+  const earnPoints = (pts: number) => {
+    setUserStats(prev => {
+      const nextPoints = prev.points + pts;
+      const currentLvl = getLevelName(prev.points).title;
+      const nextLvl = getLevelName(nextPoints).title;
+      const levelUp = currentLvl !== nextLvl;
+      return {
+        ...prev,
+        points: nextPoints,
+        level: levelUp ? prev.level + 1 : prev.level
+      };
+    });
+  };
 
   // State for loading trending feed from our service layer
   const [isRefreshingFeed, setIsRefreshingFeed] = useState(false);
@@ -1316,6 +1341,18 @@ export default function DashboardView() {
         {/* Dynamic Navigation Tabs (Desktop Left Panel) */}
         <nav className="flex md:flex-col gap-1 w-full justify-around md:justify-start md:mt-8 md:flex-1">
           <button
+            onClick={() => { playCalmTone(440, 'sine', 0.05); setActiveTab('overview'); }}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'overview'
+                ? 'bg-[#dfb15b] text-[#0c100e] shadow-[0_4px_12px_rgba(223,177,91,0.2)] font-black'
+                : 'text-[#879b90] hover:bg-[#1c2420] hover:text-[#f1ede2]'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline">8 Pillars Directory</span>
+          </button>
+
+          <button
             onClick={() => { playCalmTone(523.25, 'sine', 0.05); setActiveTab('feed'); }}
             className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
               activeTab === 'feed'
@@ -1324,7 +1361,7 @@ export default function DashboardView() {
             }`}
           >
             <BookOpen className="w-4 h-4 shrink-0" />
-            <span className="hidden md:inline">Knowledge Feed</span>
+            <span className="hidden md:inline">Slow-News & Philosophy</span>
           </button>
 
           <button
@@ -1336,7 +1373,7 @@ export default function DashboardView() {
             }`}
           >
             <Brain className="w-4 h-4 shrink-0" />
-            <span className="hidden md:inline">Focus Gym</span>
+            <span className="hidden md:inline">Focus & Decompression</span>
           </button>
 
           <button
@@ -1348,7 +1385,7 @@ export default function DashboardView() {
             }`}
           >
             <Swords className="w-4 h-4 shrink-0" />
-            <span className="hidden md:inline">Focus Arena</span>
+            <span className="hidden md:inline">Chess & Logic Arena</span>
           </button>
 
           <button
@@ -1360,7 +1397,7 @@ export default function DashboardView() {
             }`}
           >
             <Gamepad2 className="w-4 h-4 shrink-0" />
-            <span className="hidden md:inline">Mind Arcade</span>
+            <span className="hidden md:inline">Mind Arcade & Reflex</span>
           </button>
 
           <button
@@ -1372,7 +1409,7 @@ export default function DashboardView() {
             }`}
           >
             <Bookmark className="w-4 h-4 shrink-0" />
-            <span className="hidden md:inline">Saved Vault</span>
+            <span className="hidden md:inline">Sandbox & Skill Swap</span>
           </button>
         </nav>
 
@@ -1384,15 +1421,197 @@ export default function DashboardView() {
       </aside>
 
       {/* 2. Main Content Display Panel */}
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 min-h-0">
+      <main className="flex-1 overflow-y-auto p-4 md:p-8 min-h-0 relative z-10 custom-scroll">
         
+        {/* ==========================================
+            TAB 0: 8 PILLARS DIRECTORY VIEW
+            ========================================== */}
+        {activeTab === 'overview' && (
+          <div className="max-w-6xl mx-auto space-y-8 select-none">
+            
+            {/* Elegant Header Banner */}
+            <div className="glass-card p-6 md:p-8 rounded-2xl border border-[#222d26] flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-[#dfb15b]/5 rounded-full blur-3xl -z-10" />
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#dfb15b]">
+                  <Sparkles className="w-4 h-4 text-[#dfb15b] animate-pulse" />
+                  <span>CORTEX COGNITIVE SANCTUARY</span>
+                </div>
+                <h1 className="text-2xl md:text-4xl font-black text-[#f1ede2] tracking-tight font-sans">
+                  The 8 Pillars of Focus & Balance
+                </h1>
+                <p className="text-xs md:text-sm text-[#879b90] leading-relaxed">
+                  Welcome to Cortex. Choose one of our 8 modular cognitive sectors designed to restore deep attention, stimulate strategic foresight, and decompress sensory overload.
+                </p>
+              </div>
+              <div className="px-5 py-3 bg-black/40 border border-[#2c3a32] rounded-xl flex items-center gap-3 font-mono text-xs text-[#dfb15b]">
+                <Activity className="w-5 h-5 text-emerald-400 animate-pulse" />
+                <div>
+                  <div className="text-[9px] text-[#879b90]">COGNITIVE LOAD STATE</div>
+                  <div className="font-bold">100% BALANCED</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2x4 Responsive Glass-morphic Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                {
+                  id: 'slow-news',
+                  title: 'Curated Slow-News',
+                  desc: 'Absorb high-context, slow educational updates to counter fast algorithmic dopamine spikes.',
+                  icon: BookOpen,
+                  tag: 'INFORMATION',
+                  action: () => {
+                    setActiveTab('feed');
+                    setFeedSubTab('slow-news');
+                  }
+                },
+                {
+                  id: 'philosophy',
+                  title: 'Socratic Inquiry',
+                  desc: 'Deconstruct complex philosophical concepts with active-recall Socratic prompts.',
+                  icon: HelpCircle,
+                  tag: 'PHILOSOPHY',
+                  action: () => {
+                    setActiveTab('feed');
+                    setFeedSubTab('philosophy');
+                  }
+                },
+                {
+                  id: 'focus-gym',
+                  title: 'Focus & Attention Gym',
+                  desc: 'Train your prefrontal working memory with cognitive N-back exercises and focus trials.',
+                  icon: Brain,
+                  tag: 'COGNITIVE',
+                  action: () => {
+                    setActiveTab('focus');
+                    setFocusSubTab('gym');
+                  }
+                },
+                {
+                  id: 'quiet-room',
+                  title: 'The Quiet Room',
+                  desc: 'Decompress and reset sensory overload with bio-rhythmic breathing guides and auditory tones.',
+                  icon: Activity,
+                  tag: 'DECOMPRESSION',
+                  action: () => {
+                    setActiveTab('focus');
+                    setFocusSubTab('quiet');
+                  }
+                },
+                {
+                  id: 'mind-arcade',
+                  title: 'Mind Arcade Grid',
+                  desc: 'Improve processing speed and selective visual attention using high-frequency reflex boards.',
+                  icon: Gamepad2,
+                  tag: 'REACTION SPEED',
+                  action: () => {
+                    setActiveTab('arcade');
+                    setArcadeSubTab('reflex');
+                  }
+                },
+                {
+                  id: 'chess-arena',
+                  title: 'Chess & Logic Arena',
+                  desc: 'Challenge your executive foresight and strategic depth with Chess and logical puzzles.',
+                  icon: Swords,
+                  tag: 'STRATEGY',
+                  action: () => {
+                    setActiveTab('arena');
+                  }
+                },
+                {
+                  id: 'sandbox',
+                  title: 'Creative Sandbox',
+                  desc: 'Engage right-brain spatial synthesis in an interactive, peaceful geometric sand painting canvas.',
+                  icon: Sparkles,
+                  tag: 'SPATIAL',
+                  action: () => {
+                    setActiveTab('palace');
+                    setPalaceSubTab('sandbox');
+                  }
+                },
+                {
+                  id: 'skill-swap',
+                  title: 'Mutual Skill Swap',
+                  desc: 'Simulate peer knowledge exchanges and structural trade logic without distraction.',
+                  icon: Trophy,
+                  tag: 'COMMUNITY',
+                  action: () => {
+                    setActiveTab('palace');
+                    setPalaceSubTab('skillswap');
+                  }
+                }
+              ].map((pillar, idx) => {
+                const Icon = pillar.icon;
+                return (
+                  <div
+                    key={pillar.id}
+                    onClick={() => {
+                      playCalmTone(350 + idx * 50, 'sine', 0.1);
+                      pillar.action();
+                    }}
+                    className="glass-card glass-card-hover p-6 rounded-2xl flex flex-col justify-between h-[230px] cursor-pointer"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <div className="w-10 h-10 rounded-xl bg-[#dfb15b]/10 border border-[#dfb15b]/20 flex items-center justify-center">
+                          <Icon className="w-5 h-5 text-[#dfb15b]" />
+                        </div>
+                        <span className="text-[9px] font-mono tracking-widest text-[#879b90] bg-black/40 px-2.5 py-1 rounded-full border border-white/5 uppercase font-bold">
+                          {pillar.tag}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-black text-[#f1ede2] tracking-tight">{pillar.title}</h3>
+                      <p className="text-xs text-[#879b90] leading-relaxed line-clamp-3">
+                        {pillar.desc}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-[#dfb15b] mt-4 self-end group-hover:translate-x-1 transition-transform">
+                      <span>ENTER SECTOR</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ==========================================
             TAB 1: KNOWLEDGE FEED VIEW
             ========================================== */}
         {activeTab === 'feed' && (
           <div className="max-w-3xl mx-auto space-y-6">
             
-            {/* Elegant Header and Auto-Update Indicator */}
+            {/* 8 Pillars Toggle */}
+            <div className="flex bg-[#141a17]/80 border border-[#222d26] p-1 rounded-xl gap-2 backdrop-blur-sm shadow-lg">
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setFeedSubTab('slow-news'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  feedSubTab === 'slow-news'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                📰 Slow-News (Context & Perspective)
+              </button>
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setFeedSubTab('philosophy'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  feedSubTab === 'philosophy'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                💡 Philosophy (Socratic Inquiry)
+              </button>
+            </div>
+
+            {feedSubTab === 'slow-news' ? (
+              <div className="space-y-6">
+                {/* Elegant Header and Auto-Update Indicator */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#141a17] p-6 rounded-2xl border border-[#222d26]">
               <div>
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
@@ -1654,7 +1873,11 @@ export default function DashboardView() {
                   </article>
                 );
               })}
-            </div>
+              </div>
+              </div>
+            ) : (
+              <SocraticInquiry onEarnPoints={earnPoints} />
+            )}
           </div>
         )}
 
@@ -1665,7 +1888,33 @@ export default function DashboardView() {
         {activeTab === 'focus' && (
           <div className="max-w-2xl mx-auto space-y-6">
             
-            {/* Header info */}
+            {/* Focus Sub Tabs Toggle */}
+            <div className="flex bg-[#141a17]/80 border border-[#222d26] p-1 rounded-xl gap-2 backdrop-blur-sm shadow-lg">
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setFocusSubTab('gym'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  focusSubTab === 'gym'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                ⏳ Focus & Attention Gym
+              </button>
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setFocusSubTab('quiet'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  focusSubTab === 'quiet'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                🧘 The Quiet Room (Decompression)
+              </button>
+            </div>
+
+            {focusSubTab === 'gym' ? (
+              <div className="space-y-6">
+                {/* Header info */}
             <div className="bg-[#141a17] p-6 rounded-2xl border border-[#222d26]">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
                 <Brain className="w-4 h-4 text-[#dfb15b]" />
@@ -1860,6 +2109,10 @@ export default function DashboardView() {
               </div>
 
             </div>
+              </div>
+            ) : (
+              <QuietRoomGuide />
+            )}
           </div>
         )}
 
@@ -2312,7 +2565,33 @@ export default function DashboardView() {
         {activeTab === 'arcade' && (
           <div className="max-w-4xl mx-auto space-y-6">
             
-            {/* Header info */}
+            {/* Arcade Sub Tabs Toggle */}
+            <div className="flex bg-[#141a17]/80 border border-[#222d26] p-1 rounded-xl gap-2 backdrop-blur-sm shadow-lg">
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setArcadeSubTab('strategy'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  arcadeSubTab === 'strategy'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                🧩 Logical Strategy (Sudoku & Chess)
+              </button>
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setArcadeSubTab('reflex'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  arcadeSubTab === 'reflex'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                ⚡ Focus & Reflex Speed-Grid
+              </button>
+            </div>
+
+            {arcadeSubTab === 'strategy' ? (
+              <div className="space-y-6">
+                {/* Header info */}
             <div className="bg-[#141a17] p-6 rounded-2xl border border-[#222d26]">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
                 <Gamepad2 className="w-4 h-4 text-[#dfb15b]" />
@@ -2486,6 +2765,10 @@ export default function DashboardView() {
               </div>
 
             </div>
+              </div>
+            ) : (
+              <ReflexGridGame onEarnPoints={earnPoints} />
+            )}
           </div>
         )}
 
@@ -2496,7 +2779,46 @@ export default function DashboardView() {
         {activeTab === 'palace' && (
           <div className="max-w-4xl mx-auto space-y-6">
             
-            {/* Header */}
+            {/* Sandbox & Skill Swap & Vault Sub-Tab Toggle */}
+            <div className="flex bg-[#141a17]/80 border border-[#222d26] p-1 rounded-xl gap-2 backdrop-blur-sm shadow-lg">
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setPalaceSubTab('sandbox'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  palaceSubTab === 'sandbox'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                🛠️ The Sandbox
+              </button>
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setPalaceSubTab('skillswap'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  palaceSubTab === 'skillswap'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                🔧 Skill Swap
+              </button>
+              <button
+                onClick={() => { playCalmTone(350, 'sine', 0.05); setPalaceSubTab('vault'); }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer text-center ${
+                  palaceSubTab === 'vault'
+                    ? 'bg-[#dfb15b] text-[#0c100e] font-black shadow-md'
+                    : 'text-[#879b90] hover:text-[#f1ede2]'
+                }`}
+              >
+                🗄️ Mind Palace Vault
+              </button>
+            </div>
+
+            {palaceSubTab === 'sandbox' && <CreativeSandbox onEarnPoints={earnPoints} />}
+            {palaceSubTab === 'skillswap' && <SkillSwap onEarnPoints={earnPoints} />}
+
+            {palaceSubTab === 'vault' && (
+              <div className="space-y-6">
+                {/* Header */}
             <div className="bg-[#141a17] p-6 rounded-2xl border border-[#222d26] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
@@ -2661,6 +2983,8 @@ export default function DashboardView() {
               </div>
 
             </div>
+              </div>
+            )}
 
           </div>
         )}
