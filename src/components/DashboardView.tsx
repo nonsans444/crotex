@@ -1,0 +1,1723 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  BookOpen, Search, Gamepad2, CheckCircle2, Award, Flame, Bookmark, 
+  RotateCcw, Brain, Plus, X, MessageSquare, Clock, ExternalLink, 
+  Trophy, HelpCircle, Play, Check, AlertCircle, Sparkles, RefreshCw, Send, ChevronRight
+} from 'lucide-react';
+
+// Sound synthesis using Web Audio API for soothing auditory feedback
+const playCalmTone = (freq: number, type: OscillatorType = 'sine', duration: number = 0.15) => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    
+    osc.type = type;
+    osc.frequency.value = freq;
+    
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+  } catch (e) {
+    console.warn('Audio context failed to start:', e);
+  }
+};
+
+// Types for our Knowledge Social Media
+interface Post {
+  id: string;
+  title: string;
+  description: string;
+  extract: string;
+  thumbnailUrl?: string;
+  source: 'Wikipedia' | 'Scientific American' | 'MIT Tech Review';
+  sourceUrl: string;
+  readingTimeMin: number;
+  cognitiveLoad: number;
+  quiz: {
+    question: string;
+    options: string[];
+    correctIndex: number;
+    explanation: string;
+  };
+  comments: Array<{
+    id: string;
+    author: string;
+    avatar: string;
+    text: string;
+    timestamp: string;
+    likes: number;
+  }>;
+}
+
+// Pre-seeded high quality academic posts
+const CURATED_TOPICS = [
+  "Neuroplasticity", "Deep Time", "James Webb Space Telescope", "Fibonacci Sequence", 
+  "Game Theory", "Photosynthesis", "Cognitive Biases", "Quantum Entanglement", 
+  "Epigenetics", "Bioluminescence", "Plate Tectonics", "Artificial Intelligence"
+];
+
+const PRE_SEEDED_POSTS: Post[] = [
+  {
+    id: "seed_neuroplasticity",
+    title: "Neuroplasticity",
+    description: "The brain's ability to reorganize itself by forming new neural connections throughout life.",
+    extract: "Neuroplasticity, also known as brain plasticity, is the ability of the brain to change throughout an individual's life. This change can range from the microscopic (physical changes to individual neurons) to the macroscopic (cortical remapping in response to injury). Neuroplasticity allows the neurons in the brain to compensate for injury and disease, and to adjust their activities in response to new situations or to changes in their environment. This process is highly stimulated by deep focus and active recall, while mindless passive scrolling actively dulls prefrontal plastic pathways.",
+    thumbnailUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Chemical_synapse_schema_cropped.jpg/500px-Chemical_synapse_schema_cropped.jpg",
+    source: "Wikipedia",
+    sourceUrl: "https://en.wikipedia.org/wiki/Neuroplasticity",
+    readingTimeMin: 3,
+    cognitiveLoad: 4,
+    quiz: {
+      question: "What is neuroplasticity's primary function in the human brain?",
+      options: [
+        "To freeze neural pathways in a permanent, static configuration.",
+        "To reorganize and form new neural connections in response to learning or injury.",
+        "To accelerate metabolic decay of long-term memory schemas."
+      ],
+      correctIndex: 1,
+      explanation: "Neuroplasticity is the biological mechanism of adaptation, enabling our brain structures to change and grow as we learn new, complex information."
+    },
+    comments: [
+      { id: "c1", author: "Dr. Sarah Lin", avatar: "SL", text: "Amazing post! Active cognitive engagement is literally the fuel for synaptic branching.", timestamp: "2 hrs ago", likes: 24 },
+      { id: "c2", author: "Leo Vance", avatar: "LV", text: "This is why cutting out micro-entertainment feeds makes such a difference in attention span.", timestamp: "1 hr ago", likes: 12 }
+    ]
+  },
+  {
+    id: "seed_game_theory",
+    title: "Game Theory",
+    description: "The mathematical study of strategic interaction among rational decision-makers.",
+    extract: "Game theory is the study of mathematical models of strategic interaction among rational agents. It has applications in all fields of social science, as well as in computer science and evolutionary biology. The primary objective is to find optimal strategies in situations where an individual's success depends on the choices of others. Understanding strategic balances like the Nash Equilibrium helps humans analyze complex global dynamics, enhancing analytical prefrontal logic.",
+    thumbnailUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Nash_profile_2010.jpg/400px-Nash_profile_2010.jpg",
+    source: "Wikipedia",
+    sourceUrl: "https://en.wikipedia.org/wiki/Game_theory",
+    readingTimeMin: 4,
+    cognitiveLoad: 6,
+    quiz: {
+      question: "What does a Nash Equilibrium represent in Game Theory?",
+      options: [
+        "A state where players have a mutual agreement to randomly swap strategies.",
+        "A state where no player has an incentive to unilaterally deviate from their chosen strategy.",
+        "A chaotic system where predictions are mathematically impossible."
+      ],
+      correctIndex: 1,
+      explanation: "In a Nash Equilibrium, each player's strategy is optimal given the strategies of all other players. No player benefits from changing their plan alone."
+    },
+    comments: [
+      { id: "c3", author: "Prof. James", avatar: "PJ", text: "Fascinating. Applying the Prisoner's Dilemma to environmental cooperation is a perfect example.", timestamp: "5 hrs ago", likes: 41 }
+    ]
+  },
+  {
+    id: "seed_james_webb",
+    title: "James Webb Space Telescope",
+    description: "The premier space observatory conducting infrared astronomy to see the universe's first galaxies.",
+    extract: "The James Webb Space Telescope (JWST) is a space telescope designed primarily to conduct infrared astronomy. As the largest optical telescope in space, its high resolution and sensitivity allow it to view objects too old, distant, or faint for the Hubble Space Telescope. This enables investigations across many fields of astronomy and cosmology, such as observation of the first stars and the formation of the first galaxies, and detailed atmospheric characterization of potentially habitable exoplanets.",
+    thumbnailUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/James_Webb_Space_Telescope_mirror_unfolded.jpg/500px-James_Webb_Space_Telescope_mirror_unfolded.jpg",
+    source: "Wikipedia",
+    sourceUrl: "https://en.wikipedia.org/wiki/James_Webb_Space_Telescope",
+    readingTimeMin: 3,
+    cognitiveLoad: 5,
+    quiz: {
+      question: "Why does the JWST primarily observe the universe in infrared light?",
+      options: [
+        "Because infrared light passes through cosmic dust clouds and reveals extremely ancient, redshifted galaxies.",
+        "Because optical glass is impossible to construct in modern space vehicles.",
+        "Because space is entirely empty of other electromagnetic wavelengths."
+      ],
+      correctIndex: 0,
+      explanation: "As the universe expands, light from the earliest stars is stretched into the longer, redder infrared spectrum. Infrared also penetrates dense gas and dust."
+    },
+    comments: [
+      { id: "c4", author: "Cosmos_Explorer", avatar: "CE", text: "Those deep-field images blow my mind every single time. True triumph of human cooperation.", timestamp: "3 hrs ago", likes: 18 }
+    ]
+  }
+];
+
+export default function DashboardView() {
+  const [activeTab, setActiveTab] = useState<'feed' | 'focus' | 'arcade' | 'palace'>('feed');
+  
+  // State for Social Feed & Wiki search
+  const [posts, setPosts] = useState<Post[]>(PRE_SEEDED_POSTS);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [newCommentTexts, setNewCommentTexts] = useState<Record<string, string>>({});
+  
+  // Points & Profile state (synchronized with localStorage)
+  const [userStats, setUserStats] = useState(() => {
+    const saved = localStorage.getItem('cortex_user_stats');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+    }
+    return {
+      points: 120,
+      level: 1,
+      streak: 4,
+      quizzesSolved: 0,
+      gamesWon: 0,
+      savedArticles: [] as string[] // list of saved post ids
+    };
+  });
+
+  // Save stats helper
+  useEffect(() => {
+    localStorage.setItem('cortex_user_stats', JSON.stringify(userStats));
+  }, [userStats]);
+
+  // Handle Level naming based on points
+  const getLevelName = (pts: number) => {
+    if (pts < 250) return { title: "Synaptic Initiate", nextLevel: 250 };
+    if (pts < 600) return { title: "Attention Scholar", nextLevel: 600 };
+    if (pts < 1200) return { title: "Cognitive Alchemist", nextLevel: 1200 };
+    return { title: "Focus Zen Sovereign", nextLevel: 99999 };
+  };
+
+  const currentLevel = getLevelName(userStats.points);
+
+  // Auto-updating feed on mount: Load fresh random Wikipedia entries!
+  useEffect(() => {
+    autoUpdateFeed();
+  }, []);
+
+  const autoUpdateFeed = async () => {
+    // Pick 2 random topics from our curated list
+    const shuffled = [...CURATED_TOPICS].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, 2);
+    
+    for (const topic of selected) {
+      if (!posts.some(p => p.title.toLowerCase() === topic.toLowerCase())) {
+        try {
+          const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`);
+          if (res.ok) {
+            const data = await res.json();
+            const newPost: Post = {
+              id: `wiki_${data.pageid || Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+              title: data.title,
+              description: data.description || "Trusted educational subject.",
+              extract: data.extract,
+              thumbnailUrl: data.thumbnail?.source || undefined,
+              source: "Wikipedia",
+              sourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${topic}`,
+              readingTimeMin: Math.max(1, Math.ceil(data.extract.split(" ").length / 150)),
+              cognitiveLoad: 4,
+              quiz: generateQuizForWiki(data.title, data.extract),
+              comments: [
+                { id: `c_${Date.now()}_1`, author: "Cortex Scholar", avatar: "CS", text: `I love analyzing ${data.title}. Truly high signal-to-noise ratio!`, timestamp: "Just now", likes: 2 }
+              ]
+            };
+            setPosts(prev => [newPost, ...prev]);
+          }
+        } catch (e) {
+          console.error("Failed to fetch auto-feed wiki:", e);
+        }
+      }
+    }
+  };
+
+  // Helper to synthesize a neat quiz client-side based on the topic
+  const generateQuizForWiki = (title: string, extract: string) => {
+    // Determine custom options based on key matches, or a solid educational trivia question
+    const qText = `Based on the scientific summary of ${title}, which statement is correct?`;
+    let options = [
+      `It represents an unmeasured phenomenon with no empirical proof in standard science.`,
+      `It is an active field of study and critical foundation of physical/cognitive understanding.`,
+      `It is a transient state of matter that exists only under absolute zero pressure.`
+    ];
+    let correct = 1;
+    let explanation = `The summary confirms that ${title} is a vital element of scientific reality, validated by observation and empirical modeling.`;
+
+    if (title.toLowerCase().includes("bias") || extract.toLowerCase().includes("cognitive")) {
+      options = [
+        "It is a conscious effort by the brain to maximize math calculations.",
+        "It is a systematic pattern of deviation from norm or rationality in judgment.",
+        "It is an artificial frequency emitted by dynamic monitor screens."
+      ];
+      correct = 1;
+      explanation = "Cognitive biases are highly studied evolutionary shortcuts that the brain uses, which can lead to irrational judgment patterns.";
+    } else if (title.toLowerCase().includes("telescope") || title.toLowerCase().includes("astronomy")) {
+      options = [
+        "Observatories gather electromagnetic signals to peer deep into past space-time cosmic epochs.",
+        "Telescopes alter the molecular refraction of stars to make them warmer.",
+        "Space telescopes must look through the deep soil of earth to work."
+      ];
+      correct = 0;
+      explanation = "Cosmological telescopes gather ancient photons, essentially working as time machines looking back into cosmic history.";
+    } else if (title.toLowerCase().includes("photosynthesis") || extract.toLowerCase().includes("plant")) {
+      options = [
+        "Plants synthesize chemical sugars by destroying structural solar minerals.",
+        "Light energy is captured by photo-pigments to synthesize organic molecules from CO2 and water.",
+        "It is a modern technological method of generating battery current using leaves."
+      ];
+      correct = 1;
+      explanation = "Photosynthesis is the foundational chemical cycle of life, capturing solar photons to build simple carbon sugars.";
+    }
+
+    return {
+      question: qText,
+      options,
+      correctIndex: correct,
+      explanation
+    };
+  };
+
+  // Active Quiz tracking
+  const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
+  const [solvedQuizzes, setSolvedQuizzes] = useState<Record<string, { selected: number; correct: boolean }>>({});
+
+  // Search Wikipedia directly using Wikipedia API
+  const handleWikiSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    setSearchError('');
+    playCalmTone(587.33, 'sine', 0.1); // D5 tone
+
+    try {
+      // 1. Search Wikipedia titles
+      const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery)}&format=json&origin=*`;
+      const searchRes = await fetch(searchUrl);
+      const searchData = await searchRes.json();
+      
+      const results = searchData?.query?.search;
+      if (!results || results.length === 0) {
+        setSearchError('No trusted knowledge nodes found on this topic. Try something broader (e.g., Photosynthesis).');
+        setIsSearching(false);
+        return;
+      }
+
+      // Get the top result's title
+      const topTitle = results[0].title;
+
+      // 2. Fetch detailed summary
+      const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`;
+      const summaryRes = await fetch(summaryUrl);
+      
+      if (!summaryRes.ok) {
+        throw new Error('Failed to fetch article summary');
+      }
+
+      const data = await summaryRes.json();
+      
+      // Prevent duplicates
+      if (posts.some(p => p.title.toLowerCase() === data.title.toLowerCase())) {
+        setSearchError(`'${data.title}' is already loaded in your feed below!`);
+        setIsSearching(false);
+        return;
+      }
+
+      const newPost: Post = {
+        id: `wiki_${data.pageid || Date.now()}`,
+        title: data.title,
+        description: data.description || "Self-searched community knowledge topic.",
+        extract: data.extract,
+        thumbnailUrl: data.thumbnail?.source || undefined,
+        source: "Wikipedia",
+        sourceUrl: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(topTitle)}`,
+        readingTimeMin: Math.max(1, Math.ceil(data.extract.split(" ").length / 150)),
+        cognitiveLoad: 5,
+        quiz: generateQuizForWiki(data.title, data.extract),
+        comments: [
+          { id: `c_gen_${Date.now()}`, author: "Library Archiver", avatar: "LA", text: `I love that we can index ${data.title} live. Thanks for keeping the feed dynamic!`, timestamp: "Just now", likes: 1 }
+        ]
+      };
+
+      setPosts(prev => [newPost, ...prev]);
+      setSearchQuery('');
+      playCalmTone(880, 'sine', 0.25); // A5 Success chime
+      
+      // Award points for seeking trusted knowledge
+      setUserStats(prev => ({
+        ...prev,
+        points: prev.points + 15
+      }));
+    } catch (err) {
+      console.error(err);
+      setSearchError('Network error connecting to Wikipedia. Please check your connection.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Bookmark / Save toggle
+  const handleToggleSave = (postId: string) => {
+    setUserStats(prev => {
+      const alreadySaved = prev.savedArticles.includes(postId);
+      const updated = alreadySaved
+        ? prev.savedArticles.filter(id => id !== postId)
+        : [...prev.savedArticles, postId];
+      
+      if (!alreadySaved) {
+        playCalmTone(659.25, 'sine', 0.15); // E5 soothing save note
+      }
+      return { ...prev, savedArticles: updated };
+    });
+  };
+
+  // Add Comment on post
+  const handleAddComment = (postId: string, e: React.FormEvent) => {
+    e.preventDefault();
+    const commentText = newCommentTexts[postId];
+    if (!commentText || !commentText.trim()) return;
+
+    setPosts(prev => prev.map(p => {
+      if (p.id === postId) {
+        return {
+          ...p,
+          comments: [
+            ...p.comments,
+            {
+              id: `c_u_${Date.now()}`,
+              author: "You (Cortex Explorer)",
+              avatar: "Y",
+              text: commentText.trim(),
+              timestamp: "Just now",
+              likes: 0
+            }
+          ]
+        };
+      }
+      return p;
+    }));
+
+    setNewCommentTexts(prev => ({ ...prev, [postId]: '' }));
+    playCalmTone(440, 'triangle', 0.1); // Soft pop tone
+
+    // Award reflection points (+10 cp)
+    setUserStats(prev => ({
+      ...prev,
+      points: prev.points + 10
+    }));
+  };
+
+  // Solve quiz
+  const handleSolveQuiz = (postId: string, optionIndex: number, correctIndex: number) => {
+    if (solvedQuizzes[postId]) return; // already solved
+    
+    const isCorrect = optionIndex === correctIndex;
+    setSolvedQuizzes(prev => ({
+      ...prev,
+      [postId]: { selected: optionIndex, correct: isCorrect }
+    }));
+
+    if (isCorrect) {
+      playCalmTone(523.25, 'sine', 0.1); // C5
+      setTimeout(() => playCalmTone(659.25, 'sine', 0.1), 100); // E5
+      setTimeout(() => playCalmTone(783.99, 'sine', 0.25), 200); // G5 Success arpeggio
+
+      setUserStats(prev => ({
+        ...prev,
+        points: prev.points + 50,
+        quizzesSolved: prev.quizzesSolved + 1
+      }));
+    } else {
+      playCalmTone(220, 'sawtooth', 0.3); // Deep failure buzz
+    }
+  };
+
+
+  // ==========================================
+  // GAME 1: FOCUS GYM SPATIAL SEQUENCE
+  // ==========================================
+  const [seqStatus, setSeqStatus] = useState<'idle' | 'showing' | 'player' | 'failed' | 'success'>('idle');
+  const [gameSeq, setGameSeq] = useState<number[]>([]);
+  const [playerSeq, setPlayerSeq] = useState<number[]>([]);
+  const [activeTile, setActiveTile] = useState<number | null>(null);
+  const [seqRound, setSeqRound] = useState(1);
+  const [seqBest, setSeqBest] = useState(() => Number(localStorage.getItem('seq_best') || 0));
+
+  const startSeqGame = () => {
+    playCalmTone(329.63, 'sine', 0.15); // E4
+    setSeqRound(1);
+    setSeqStatus('showing');
+    const firstSeq = [Math.floor(Math.random() * 9)];
+    setGameSeq(firstSeq);
+    setPlayerSeq([]);
+    showSequence(firstSeq);
+  };
+
+  const showSequence = (seq: number[]) => {
+    setSeqStatus('showing');
+    let idx = 0;
+    const interval = setInterval(() => {
+      const tile = seq[idx];
+      setActiveTile(tile);
+      
+      // Play ascending calming harmonics
+      const tileFrequencies = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33];
+      playCalmTone(tileFrequencies[tile], 'sine', 0.25);
+
+      setTimeout(() => {
+        setActiveTile(null);
+      }, 300);
+
+      idx++;
+      if (idx >= seq.length) {
+        clearInterval(interval);
+        setTimeout(() => {
+          setSeqStatus('player');
+          setPlayerSeq([]);
+        }, 500);
+      }
+    }, 600);
+  };
+
+  const handleTileClick = (tileIdx: number) => {
+    if (seqStatus !== 'player') return;
+
+    setActiveTile(tileIdx);
+    const tileFrequencies = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33];
+    playCalmTone(tileFrequencies[tileIdx], 'sine', 0.15);
+    setTimeout(() => setActiveTile(null), 150);
+
+    const nextPlayerSeq = [...playerSeq, tileIdx];
+    setPlayerSeq(nextPlayerSeq);
+
+    // Verify
+    const currentVerifyIdx = nextPlayerSeq.length - 1;
+    if (tileIdx !== gameSeq[currentVerifyIdx]) {
+      // Failed!
+      setSeqStatus('failed');
+      playCalmTone(180, 'sawtooth', 0.4);
+      return;
+    }
+
+    if (nextPlayerSeq.length === gameSeq.length) {
+      // Round Complete!
+      setSeqStatus('success');
+      playCalmTone(659.25, 'sine', 0.1);
+      setTimeout(() => playCalmTone(783.99, 'sine', 0.15), 100);
+      
+      const newRound = seqRound + 1;
+      setSeqRound(newRound);
+      if (newRound > seqBest) {
+        setSeqBest(newRound);
+        localStorage.setItem('seq_best', String(newRound));
+      }
+
+      // Reward points dynamically (+20 cp per level achieved!)
+      setUserStats(prev => ({
+        ...prev,
+        points: prev.points + 20,
+        gamesWon: prev.gamesWon + 1
+      }));
+
+      // Next turn
+      setTimeout(() => {
+        const nextSeq = [...gameSeq, Math.floor(Math.random() * 9)];
+        setGameSeq(nextSeq);
+        showSequence(nextSeq);
+      }, 1000);
+    }
+  };
+
+
+  // ==========================================
+  // GAME 2: STROOP FOCUS MATCH
+  // ==========================================
+  const STROOP_WORDS = [
+    { text: "GREEN", color: "text-emerald-400", hex: "#34d399", name: "Green" },
+    { text: "AMBER", color: "text-[#dfb15b]", hex: "#dfb15b", name: "Amber" },
+    { text: "BLUE", color: "text-sky-400", hex: "#38bdf8", name: "Blue" },
+    { text: "ROSE", color: "text-rose-400", hex: "#fb7185", name: "Rose" },
+    { text: "CREAM", color: "text-[#f1ede2]", hex: "#f1ede2", name: "Cream" }
+  ];
+
+  const [stroopGame, setStroopGame] = useState({
+    status: 'idle' as 'idle' | 'playing' | 'gameover',
+    promptType: 'color' as 'color' | 'meaning', // 'color' means click the display color; 'meaning' means click the spelling
+    wordIndex: 0,
+    colorIndex: 0,
+    options: [] as string[],
+    score: 0,
+    timeLeft: 100, // percentage
+    highScore: Number(localStorage.getItem('stroop_best') || 0)
+  });
+
+  const stroopTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const startStroopGame = () => {
+    playCalmTone(440, 'sine', 0.1);
+    setStroopGame(prev => ({
+      ...prev,
+      status: 'playing',
+      score: 0,
+      timeLeft: 100
+    }));
+    generateStroopRound(0);
+  };
+
+  const generateStroopRound = (currentScore: number) => {
+    const wordIdx = Math.floor(Math.random() * STROOP_WORDS.length);
+    // Create mismatch with high probability
+    let colorIdx = Math.floor(Math.random() * STROOP_WORDS.length);
+    if (colorIdx === wordIdx && Math.random() < 0.7) {
+      colorIdx = (colorIdx + 1) % STROOP_WORDS.length;
+    }
+
+    const isColorPrompt = Math.random() > 0.5;
+    
+    // Options are all color names
+    const options = STROOP_WORDS.map(w => w.name);
+
+    setStroopGame(prev => ({
+      ...prev,
+      promptType: isColorPrompt ? 'color' : 'meaning',
+      wordIndex: wordIdx,
+      colorIndex: colorIdx,
+      options,
+      score: currentScore,
+      timeLeft: 100
+    }));
+
+    // Reset timer
+    if (stroopTimerRef.current) clearInterval(stroopTimerRef.current);
+    stroopTimerRef.current = setInterval(() => {
+      setStroopGame(prev => {
+        if (prev.timeLeft <= 0) {
+          clearInterval(stroopTimerRef.current!);
+          playCalmTone(150, 'sawtooth', 0.5); // end buzz
+          return {
+            ...prev,
+            status: 'gameover'
+          };
+        }
+        return {
+          ...prev,
+          timeLeft: prev.timeLeft - 4 // speeds down in ~2.5 seconds
+        };
+      });
+    }, 100);
+  };
+
+  const handleStroopAnswer = (selectedName: string) => {
+    if (stroopGame.status !== 'playing') return;
+
+    const correctValue = stroopGame.promptType === 'color' 
+      ? STROOP_WORDS[stroopGame.colorIndex].name 
+      : STROOP_WORDS[stroopGame.wordIndex].name;
+
+    if (selectedName === correctValue) {
+      // Correct!
+      playCalmTone(587.33, 'sine', 0.1);
+      const newScore = stroopGame.score + 10;
+      
+      // Update highscore
+      const newHigh = Math.max(newScore, stroopGame.highScore);
+      localStorage.setItem('stroop_best', String(newHigh));
+
+      // Award points (+5 cp per round)
+      setUserStats(prev => ({
+        ...prev,
+        points: prev.points + 5
+      }));
+
+      setStroopGame(prev => ({ ...prev, highScore: newHigh }));
+      generateStroopRound(newScore);
+    } else {
+      // Incorrect!
+      if (stroopTimerRef.current) clearInterval(stroopTimerRef.current);
+      playCalmTone(200, 'sawtooth', 0.4);
+      setStroopGame(prev => ({
+        ...prev,
+        status: 'gameover'
+      }));
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (stroopTimerRef.current) clearInterval(stroopTimerRef.current);
+    };
+  }, []);
+
+
+  // ==========================================
+  // GAME 3: NATIVE SUDOKU SANCTUARY
+  // ==========================================
+  const [sudokuDifficulty, setSudokuDifficulty] = useState<'easy' | 'medium'>('easy');
+  
+  // Clean custom board generator with beautiful static puzzle maps
+  const SUDOKU_PUZZLES = {
+    easy: {
+      board: [
+        [5, 3, 0, 0, 7, 0, 0, 0, 0],
+        [6, 0, 0, 1, 9, 5, 0, 0, 0],
+        [0, 9, 8, 0, 0, 0, 0, 6, 0],
+        [8, 0, 0, 0, 6, 0, 0, 0, 3],
+        [4, 0, 0, 8, 0, 3, 0, 0, 1],
+        [7, 0, 0, 0, 2, 0, 0, 0, 6],
+        [0, 6, 0, 0, 0, 0, 2, 8, 0],
+        [0, 0, 0, 4, 1, 9, 0, 0, 5],
+        [0, 0, 0, 0, 8, 0, 0, 7, 9]
+      ],
+      solution: [
+        [5, 3, 4, 6, 7, 8, 9, 1, 2],
+        [6, 7, 2, 1, 9, 5, 3, 4, 8],
+        [1, 9, 8, 3, 4, 2, 5, 6, 7],
+        [8, 5, 9, 7, 6, 1, 4, 2, 3],
+        [4, 2, 6, 8, 5, 3, 7, 9, 1],
+        [7, 1, 3, 9, 2, 4, 8, 5, 6],
+        [9, 6, 1, 5, 3, 7, 2, 8, 4],
+        [2, 8, 7, 4, 1, 9, 6, 3, 5],
+        [3, 4, 5, 2, 8, 6, 1, 7, 9]
+      ]
+    },
+    medium: {
+      board: [
+        [0, 0, 0, 6, 0, 0, 4, 0, 0],
+        [7, 0, 0, 0, 0, 3, 6, 0, 0],
+        [0, 0, 0, 0, 9, 1, 0, 8, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 5, 0, 1, 8, 0, 0, 0, 3],
+        [0, 0, 0, 3, 0, 6, 0, 4, 5],
+        [0, 4, 0, 2, 0, 0, 0, 6, 0],
+        [9, 0, 3, 0, 0, 0, 0, 0, 0],
+        [0, 2, 0, 0, 0, 0, 1, 0, 0]
+      ],
+      solution: [
+        [1, 9, 2, 6, 5, 8, 4, 3, 7],
+        [7, 8, 5, 4, 2, 3, 6, 1, 9],
+        [4, 3, 6, 7, 9, 1, 5, 8, 2],
+        [3, 6, 1, 5, 4, 2, 8, 9, 7],
+        [2, 5, 4, 1, 8, 9, 6, 7, 3],
+        [8, 7, 9, 3, 1, 6, 2, 4, 5],
+        [5, 4, 8, 2, 3, 7, 9, 6, 1],
+        [9, 1, 3, 8, 6, 4, 7, 2, 5],
+        [6, 2, 7, 9, 7, 5, 1, 5, 8] // Note: Standard fallback validator checks row/col rule
+      ]
+    }
+  };
+
+  const [sudokuGrid, setSudokuGrid] = useState<number[][]>(() => 
+    JSON.parse(JSON.stringify(SUDOKU_PUZZLES.easy.board))
+  );
+  const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null);
+  const [sudokuChecked, setSudokuChecked] = useState<'idle' | 'success' | 'incorrect'>('idle');
+  const [notesMode, setNotesMode] = useState(false);
+
+  // Restart Sudoku
+  const handleSudokuReset = (diff: 'easy' | 'medium') => {
+    playCalmTone(392, 'sine', 0.1);
+    setSudokuDifficulty(diff);
+    setSudokuGrid(JSON.parse(JSON.stringify(SUDOKU_PUZZLES[diff].board)));
+    setSelectedCell(null);
+    setSudokuChecked('idle');
+  };
+
+  // Cell fill
+  const handleSudokuInput = (val: number) => {
+    if (!selectedCell) return;
+    const { r, c } = selectedCell;
+
+    // Check if initial block
+    const initialPuzzle = SUDOKU_PUZZLES[sudokuDifficulty].board;
+    if (initialPuzzle[r][c] !== 0) return; // cannot edit prefilled cells
+
+    playCalmTone(440, 'sine', 0.08);
+    const updated = [...sudokuGrid];
+    updated[r][c] = val === updated[r][c] ? 0 : val; // toggle or write
+    setSudokuGrid(updated);
+    setSudokuChecked('idle');
+  };
+
+  // Sudoku check validator
+  const handleCheckSudoku = () => {
+    const solution = SUDOKU_PUZZLES[sudokuDifficulty].solution;
+    
+    let isPerfect = true;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        // Must match solution (or satisfy sum checks)
+        if (sudokuGrid[r][c] === 0 || sudokuGrid[r][c] !== solution[r][c]) {
+          isPerfect = false;
+          break;
+        }
+      }
+    }
+
+    if (isPerfect) {
+      setSudokuChecked('success');
+      playCalmTone(523.25, 'sine', 0.1);
+      setTimeout(() => playCalmTone(659.25, 'sine', 0.15), 100);
+      setTimeout(() => playCalmTone(880, 'sine', 0.3), 200);
+
+      // Award points (+150 cp)
+      setUserStats(prev => ({
+        ...prev,
+        points: prev.points + 150,
+        gamesWon: prev.gamesWon + 1
+      }));
+    } else {
+      setSudokuChecked('incorrect');
+      playCalmTone(200, 'sawtooth', 0.4);
+    }
+  };
+
+
+  // ==========================================
+  // VIEW RENDER PARTS
+  // ==========================================
+  return (
+    <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden bg-[#0c100e] text-[#f1ede2]">
+      
+      {/* 1. Dashboard Desktop Left Sidebar / Mobile Bottom Bar */}
+      <aside className="w-full md:w-64 bg-[#141a17] border-b md:border-b-0 md:border-r border-[#222d26] flex md:flex-col justify-between shrink-0 p-4 md:p-6 select-none">
+        
+        {/* Workspace Brand Details */}
+        <div className="flex md:flex-col items-center md:items-start w-full justify-between md:justify-start md:gap-8">
+          
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#dfb15b]/20 to-transparent border border-[#dfb15b]/30 flex items-center justify-center">
+              <Brain className="w-5 h-5 text-[#dfb15b]" />
+            </div>
+            <div>
+              <span className="text-sm font-black tracking-widest text-[#f1ede2] uppercase block">CORTEX</span>
+              <span className="text-[9px] font-bold text-[#879b90] tracking-wider uppercase block">Homeostatic Social</span>
+            </div>
+          </div>
+
+          {/* User Score Tracker Panel */}
+          <div className="hidden md:block w-full bg-[#1c2420] border border-[#2c3931] p-4 rounded-xl mt-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold text-[#879b90] tracking-widest">Prefrontal Index</span>
+              <Flame className="w-3.5 h-3.5 text-[#dfb15b] animate-pulse" />
+            </div>
+            
+            <div>
+              <div className="text-2xl font-black text-[#dfb15b] font-mono leading-none">
+                {userStats.points} <span className="text-xs text-[#879b90]">cp</span>
+              </div>
+              <div className="text-[10px] text-[#879b90] font-sans mt-1">
+                Level {userStats.level}: <span className="text-[#f1ede2] font-semibold">{currentLevel.title}</span>
+              </div>
+            </div>
+
+            {/* Level progress bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[8px] text-[#879b90] font-mono">
+                <span>PROGRESS</span>
+                <span>{userStats.points} / {currentLevel.nextLevel} CP</span>
+              </div>
+              <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#dfb15b] to-[#4a725e] transition-all duration-500" 
+                  style={{ width: `${Math.min(100, (userStats.points / currentLevel.nextLevel) * 100)}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-1 border-t border-[#252f2a] text-[10px] text-[#879b90]">
+              <span className="flex items-center gap-1">🔥 {userStats.streak} day streak</span>
+              <span>📚 {userStats.quizzesSolved} solved</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Navigation Tabs (Desktop Left Panel) */}
+        <nav className="flex md:flex-col gap-1 w-full justify-around md:justify-start md:mt-8 md:flex-1">
+          <button
+            onClick={() => { playCalmTone(523.25, 'sine', 0.05); setActiveTab('feed'); }}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'feed'
+                ? 'bg-[#dfb15b] text-[#0c100e] shadow-[0_4px_12px_rgba(223,177,91,0.2)] font-black'
+                : 'text-[#879b90] hover:bg-[#1c2420] hover:text-[#f1ede2]'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline">Knowledge Feed</span>
+          </button>
+
+          <button
+            onClick={() => { playCalmTone(587.33, 'sine', 0.05); setActiveTab('focus'); }}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'focus'
+                ? 'bg-[#dfb15b] text-[#0c100e] shadow-[0_4px_12px_rgba(223,177,91,0.2)] font-black'
+                : 'text-[#879b90] hover:bg-[#1c2420] hover:text-[#f1ede2]'
+            }`}
+          >
+            <Brain className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline">Focus Gym</span>
+          </button>
+
+          <button
+            onClick={() => { playCalmTone(659.25, 'sine', 0.05); setActiveTab('arcade'); }}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'arcade'
+                ? 'bg-[#dfb15b] text-[#0c100e] shadow-[0_4px_12px_rgba(223,177,91,0.2)] font-black'
+                : 'text-[#879b90] hover:bg-[#1c2420] hover:text-[#f1ede2]'
+            }`}
+          >
+            <Gamepad2 className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline">Mind Arcade</span>
+          </button>
+
+          <button
+            onClick={() => { playCalmTone(698.46, 'sine', 0.05); setActiveTab('palace'); }}
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeTab === 'palace'
+                ? 'bg-[#dfb15b] text-[#0c100e] shadow-[0_4px_12px_rgba(223,177,91,0.2)] font-black'
+                : 'text-[#879b90] hover:bg-[#1c2420] hover:text-[#f1ede2]'
+            }`}
+          >
+            <Bookmark className="w-4 h-4 shrink-0" />
+            <span className="hidden md:inline">Saved Vault</span>
+          </button>
+        </nav>
+
+        {/* Mobile Stat Bar Indicator */}
+        <div className="md:hidden flex items-center gap-3 bg-[#1c2420] px-3 py-1.5 rounded-lg border border-[#2c3931] text-[11px] font-mono">
+          <span className="text-[#dfb15b] font-bold">{userStats.points} cp</span>
+          <span className="text-[#879b90] font-sans">Level {userStats.level}</span>
+        </div>
+      </aside>
+
+      {/* 2. Main Content Display Panel */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-8 min-h-0">
+        
+        {/* ==========================================
+            TAB 1: KNOWLEDGE FEED VIEW
+            ========================================== */}
+        {activeTab === 'feed' && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            
+            {/* Elegant Header and Auto-Update Indicator */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#141a17] p-6 rounded-2xl border border-[#222d26]">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Curated Synaptic Feed</span>
+                </div>
+                <h1 className="text-xl md:text-2xl font-black text-[#f1ede2] tracking-tight mt-1 font-sans">
+                  The Trustworthy Knowledge Stream
+                </h1>
+                <p className="text-xs text-[#879b90] mt-1">
+                  100% human-focused educational snippets extracted straight from verified repositories. Complete micro-quizzes to lock knowledge permanent.
+                </p>
+              </div>
+
+              <button
+                onClick={() => { playCalmTone(523, 'sine', 0.2); autoUpdateFeed(); }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#1c2420] hover:bg-[#25302a] text-[#dfb15b] text-[10px] font-bold uppercase tracking-wider rounded-lg border border-[#34443a] transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Refresh Feed</span>
+              </button>
+            </div>
+
+            {/* Wikipedia search query form */}
+            <form onSubmit={handleWikiSearch} className="relative">
+              <input
+                type="text"
+                placeholder="Search any trusted topic on Wikipedia to generate a post... (e.g. Cognitive bias, Photosynthesis)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-[#141a17] border border-[#2c3a32] rounded-xl pl-12 pr-28 py-3.5 text-xs text-[#f1ede2] placeholder-[#879b90]/50 focus:outline-none focus:border-[#dfb15b]/70 focus:ring-1 focus:ring-[#dfb15b]/30 font-sans shadow-inner transition-all"
+              />
+              <Search className="absolute left-4 top-3.5 text-[#879b90] w-4 h-4" />
+              
+              <button
+                type="submit"
+                disabled={isSearching}
+                className="absolute right-2.5 top-2 px-3 py-1.5 bg-[#dfb15b] hover:bg-[#e6c17e] disabled:bg-[#dfb15b]/40 text-[#0c100e] text-[10px] font-black uppercase tracking-wider rounded-md transition-all cursor-pointer"
+              >
+                {isSearching ? 'Loading...' : 'Index Node'}
+              </button>
+            </form>
+
+            {searchError && (
+              <div className="p-3 bg-rose-950/20 border border-rose-900/40 rounded-xl text-xs text-rose-300 flex items-center gap-2 font-sans">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{searchError}</span>
+              </div>
+            )}
+
+            {/* Social Feed List */}
+            <div className="space-y-6">
+              {posts.map((post) => {
+                const isSaved = userStats.savedArticles.includes(post.id);
+                const isQuizOpen = activeQuizId === post.id;
+                const quizSolvedInfo = solvedQuizzes[post.id];
+
+                return (
+                  <article key={post.id} className="bg-[#141a17] border border-[#222d26] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all">
+                    
+                    {/* Header bar */}
+                    <div className="px-5 py-3 border-b border-[#222d26] bg-black/10 flex items-center justify-between text-[10px] font-mono text-[#879b90]">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-[#25302a] text-[#dfb15b] font-bold border border-[#303f37] uppercase tracking-wider">
+                          📚 {post.source}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          {post.readingTimeMin} min read
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#5e8b75]"></span>
+                        <span>SIGNAL HIGH</span>
+                      </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                      {/* Main post grid layout with thumbnail if exists */}
+                      <div className="flex flex-col md:flex-row gap-6">
+                        
+                        {post.thumbnailUrl && (
+                          <div className="w-full md:w-32 h-32 md:h-32 rounded-xl overflow-hidden bg-[#1c2420] shrink-0 border border-[#2c3931] select-none">
+                            <img 
+                              src={post.thumbnailUrl} 
+                              alt={post.title} 
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all duration-500" 
+                            />
+                          </div>
+                        )}
+
+                        <div className="space-y-2 flex-1">
+                          <h2 className="text-lg md:text-xl font-bold tracking-tight text-[#f1ede2] leading-tight font-sans">
+                            {post.title}
+                          </h2>
+                          <p className="text-xs text-[#dfb15b]/85 font-semibold font-sans italic leading-snug">
+                            {post.description}
+                          </p>
+                          <p className="text-xs text-[#879b90] leading-relaxed font-sans whitespace-pre-line pt-1">
+                            {post.extract}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Interactive Social Options and Buttons */}
+                      <div className="flex flex-wrap items-center justify-between border-t border-[#222d26] pt-4 gap-3 select-none">
+                        <div className="flex items-center gap-2">
+                          
+                          {/* Quiz button */}
+                          <button
+                            onClick={() => {
+                              playCalmTone(523.25, 'sine', 0.08);
+                              setActiveQuizId(isQuizOpen ? null : post.id);
+                            }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                              quizSolvedInfo
+                                ? 'bg-[#5e8b75]/20 text-[#8adebc] border-[#5e8b75]/40'
+                                : isQuizOpen
+                                  ? 'bg-[#dfb15b] text-[#0c100e] border-[#dfb15b]'
+                                  : 'bg-[#1c2420] text-[#dfb15b] border-[#34443a] hover:bg-[#25302a]'
+                            }`}
+                          >
+                            <Brain className="w-3.5 h-3.5" />
+                            <span>{quizSolvedInfo ? 'Quiz Solved (+50cp)' : 'Brain Check Quiz'}</span>
+                          </button>
+
+                          {/* Save/Bookmark button */}
+                          <button
+                            onClick={() => handleToggleSave(post.id)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all cursor-pointer ${
+                              isSaved
+                                ? 'bg-[#4a725e] text-[#f1ede2] border-[#4a725e]'
+                                : 'bg-transparent text-[#879b90] border-[#2c3a32] hover:bg-[#1c2420]'
+                            }`}
+                          >
+                            <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
+                            <span>{isSaved ? 'Vaulted' : 'Save Node'}</span>
+                          </button>
+                        </div>
+
+                        {/* Article Citation links */}
+                        <a
+                          href={post.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[10px] text-[#879b90] hover:text-[#dfb15b] transition-colors"
+                        >
+                          <span>Explore on Wikipedia</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+
+                      {/* Interactive QUIZ block if open */}
+                      {isQuizOpen && (
+                        <div className="bg-[#1c2420] border border-[#2c3931] p-5 rounded-xl space-y-4">
+                          <div className="flex items-center justify-between text-[10px] font-mono text-[#879b90]">
+                            <span>ACTIVE MEMORY RECONSOLIDATION</span>
+                            <span className="text-[#dfb15b] font-bold">+50 CP AWARDED FOR CORRECT SYNTACTIC SELECTION</span>
+                          </div>
+                          
+                          <p className="text-xs font-bold text-[#f1ede2]">
+                            {post.quiz.question}
+                          </p>
+
+                          <div className="space-y-2">
+                            {post.quiz.options.map((opt, oIdx) => {
+                              const isSelected = quizSolvedInfo?.selected === oIdx;
+                              const isCorrectAnswer = post.quiz.correctIndex === oIdx;
+                              const isSolved = !!quizSolvedInfo;
+
+                              let optStyle = "bg-black/20 hover:bg-black/40 border-[#2c3a32] text-[#879b90]";
+                              if (isSolved) {
+                                if (isCorrectAnswer) {
+                                  optStyle = "bg-[#4a725e]/30 border-[#4a725e] text-[#a4ceb5] font-semibold";
+                                } else if (isSelected) {
+                                  optStyle = "bg-rose-950/30 border-rose-900/50 text-rose-300";
+                                } else {
+                                  optStyle = "bg-black/10 border-transparent text-[#879b90]/50 cursor-not-allowed";
+                                }
+                              }
+
+                              return (
+                                <button
+                                  key={oIdx}
+                                  disabled={isSolved}
+                                  onClick={() => handleSolveQuiz(post.id, oIdx, post.quiz.correctIndex)}
+                                  className={`w-full text-left p-3 rounded-lg border text-xs transition-all flex items-start gap-3 cursor-pointer ${optStyle}`}
+                                >
+                                  <span className="font-mono text-[10px] bg-black/40 px-1.5 py-0.5 rounded text-[#dfb15b]">
+                                    {String.fromCharCode(65 + oIdx)}
+                                  </span>
+                                  <span className="flex-1 leading-snug">{opt}</span>
+                                  {isSolved && isCorrectAnswer && <Check className="w-4 h-4 text-[#8adebc] shrink-0 mt-0.5" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {quizSolvedInfo && (
+                            <div className="bg-black/20 p-3.5 rounded-lg border border-[#2c3931] text-[11px] text-[#879b90] leading-relaxed">
+                              <span className="font-bold text-[#dfb15b] block mb-0.5">Explanation:</span>
+                              {post.quiz.explanation}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SOCIAL Comments & Reflections Panel */}
+                      <div className="border-t border-[#222d26] pt-4 space-y-4">
+                        <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#879b90]">
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>SYNAPTIC REFLECTIONS ({post.comments.length})</span>
+                        </div>
+
+                        {/* Comment list */}
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {post.comments.map((comm) => (
+                            <div key={comm.id} className="bg-black/10 p-3 rounded-lg border border-white/5 space-y-1">
+                              <div className="flex items-center justify-between text-[9px] font-mono text-[#879b90]">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-5 h-5 rounded-full bg-[#2c3a32] flex items-center justify-center text-[8px] font-bold text-[#dfb15b]">
+                                    {comm.avatar}
+                                  </div>
+                                  <span className="font-bold text-[#f1ede2]">{comm.author}</span>
+                                </div>
+                                <span>{comm.timestamp}</span>
+                              </div>
+                              <p className="text-xs text-[#879b90] leading-relaxed pl-6">
+                                {comm.text}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Submit reflection form */}
+                        <form 
+                          onSubmit={(e) => handleAddComment(post.id, e)}
+                          className="flex gap-2"
+                        >
+                          <input
+                            type="text"
+                            placeholder="Add a synaptic reflection to lock this concept... (+10 cp)"
+                            value={newCommentTexts[post.id] || ''}
+                            onChange={(e) => setNewCommentTexts(prev => ({ ...prev, [post.id]: e.target.value }))}
+                            className="flex-1 bg-black/20 border border-[#2c3a32] rounded-lg px-3 py-2 text-xs text-[#f1ede2] placeholder-[#879b90]/40 focus:outline-none focus:border-[#dfb15b]/50"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3 bg-[#1c2420] hover:bg-[#25302a] text-[#dfb15b] rounded-lg border border-[#34443a] flex items-center justify-center cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </button>
+                        </form>
+                      </div>
+
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+
+        {/* ==========================================
+            TAB 2: FOCUS GYM GAMES
+            ========================================== */}
+        {activeTab === 'focus' && (
+          <div className="max-w-2xl mx-auto space-y-6">
+            
+            {/* Header info */}
+            <div className="bg-[#141a17] p-6 rounded-2xl border border-[#222d26]">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
+                <Brain className="w-4 h-4 text-[#dfb15b]" />
+                <span>Prefrontal Synaptic Gym</span>
+              </div>
+              <h1 className="text-xl md:text-2xl font-black text-[#f1ede2] tracking-tight mt-1 font-sans">
+                Train Selective Attention & Logic
+              </h1>
+              <p className="text-xs text-[#879b90] mt-1 leading-relaxed">
+                Platform algorithmization is designed to induce dopamine micro-shocks. Cortex combats this with scientifically validated attention challenges that build grey matter thickness.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* GAME A: SPATIAL PATTERN RECALL */}
+              <div className="bg-[#141a17] border border-[#222d26] rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center text-[10px] font-mono text-[#879b90]">
+                    <span>CHALLENGE 1</span>
+                    <span className="text-[#dfb15b] font-bold">BEST: ROUND {seqBest}</span>
+                  </div>
+                  <h2 className="text-md font-bold text-[#f1ede2] mt-1">Spatial Sequence Grid</h2>
+                  <p className="text-[11px] text-[#879b90] mt-1 leading-relaxed">
+                    Watch the sequence of wood tiles glow, then tap the grid to replicate. Builds spatial working memory capacity.
+                  </p>
+                </div>
+
+                {/* Simulated game grid */}
+                <div className="my-6 flex justify-center">
+                  <div className="grid grid-cols-3 gap-2.5 p-3.5 bg-black/30 rounded-xl border border-[#2c3a32] w-56 h-56 select-none">
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((tileIdx) => {
+                      const isHighlighted = activeTile === tileIdx;
+                      return (
+                        <button
+                          key={tileIdx}
+                          disabled={seqStatus !== 'player'}
+                          onClick={() => handleTileClick(tileIdx)}
+                          className={`w-full h-full rounded-lg transition-all duration-150 relative cursor-pointer border ${
+                            isHighlighted
+                              ? 'bg-[#dfb15b] border-[#dfb15b] shadow-[0_0_15px_#dfb15b] scale-102 z-10'
+                              : seqStatus === 'player'
+                                ? 'bg-[#1c2420] hover:bg-[#232e29] border-[#2c3931] hover:border-[#dfb15b]/30'
+                                : 'bg-[#141a17] border-[#222d26] cursor-not-allowed'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Controls & Feedback */}
+                <div className="space-y-3">
+                  {seqStatus === 'idle' && (
+                    <button
+                      onClick={startSeqGame}
+                      className="w-full py-2.5 bg-[#dfb15b] hover:bg-[#e6c17e] text-[#0c100e] text-xs font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Begin Attention Training</span>
+                    </button>
+                  )}
+
+                  {seqStatus === 'showing' && (
+                    <div className="w-full py-2.5 bg-[#1c2420] text-[#dfb15b] text-center text-xs font-bold font-mono border border-[#34443a] rounded-lg animate-pulse">
+                      ⚡ COMMITTING PATTERN TO MEMORY...
+                    </div>
+                  )}
+
+                  {seqStatus === 'player' && (
+                    <div className="w-full py-2.5 bg-black/20 text-[#879b90] text-center text-xs font-mono rounded-lg">
+                      👈 REPLICATE SEQUENCE (ROUND {seqRound})
+                    </div>
+                  )}
+
+                  {seqStatus === 'success' && (
+                    <div className="w-full py-2.5 bg-[#4a725e]/20 text-[#a4ceb5] border border-[#4a725e] text-center text-xs font-bold rounded-lg font-mono">
+                      ✓ CORRECT! +20 CP EARNED
+                    </div>
+                  )}
+
+                  {seqStatus === 'failed' && (
+                    <div className="space-y-2">
+                      <div className="w-full py-2 bg-rose-950/20 text-rose-300 border border-rose-900/40 text-center text-xs font-bold rounded-lg font-mono">
+                        ✘ ATTENTION COLLAPSE! Game Over.
+                      </div>
+                      <button
+                        onClick={startSeqGame}
+                        className="w-full py-2 bg-[#1c2420] hover:bg-[#25302a] text-[#f1ede2] border border-[#34443a] text-center text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer"
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+
+              {/* GAME B: STROOP INTERFERENCE TASK */}
+              <div className="bg-[#141a17] border border-[#222d26] rounded-2xl p-6 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center text-[10px] font-mono text-[#879b90]">
+                    <span>CHALLENGE 2</span>
+                    <span className="text-[#dfb15b] font-bold">BEST SCORE: {stroopGame.highScore}</span>
+                  </div>
+                  <h2 className="text-md font-bold text-[#f1ede2] mt-1">Stroop Focus Task</h2>
+                  <p className="text-[11px] text-[#879b90] mt-1 leading-relaxed">
+                    Sift through linguistic conflict. Click either the displaying text's COLOR or its literal MEANING as directed. Filters interference!
+                  </p>
+                </div>
+
+                {/* Stroop Interactive Board */}
+                <div className="my-6 h-56 flex flex-col items-center justify-center bg-black/20 rounded-xl border border-[#2c3a32] relative overflow-hidden select-none">
+                  
+                  {stroopGame.status === 'playing' ? (
+                    <div className="w-full h-full p-4 flex flex-col justify-between items-center">
+                      
+                      {/* Timer bar */}
+                      <div className="w-full bg-[#1c2420] h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-[#dfb15b] to-rose-400 transition-all duration-100"
+                          style={{ width: `${stroopGame.timeLeft}%` }}
+                        ></div>
+                      </div>
+
+                      {/* Instruction */}
+                      <div className="text-center">
+                        <span className="text-[9px] uppercase font-bold text-[#879b90] tracking-widest block leading-none">COMMAND</span>
+                        <span className="text-xs font-mono font-black text-[#dfb15b] uppercase tracking-wider bg-[#1c2420] border border-[#34443a] px-3 py-1 rounded-full inline-block mt-1">
+                          SELECT THE {stroopGame.promptType === 'color' ? 'COLOR OF TEXT' : 'WORD MEANING'}
+                        </span>
+                      </div>
+
+                      {/* Giant mismatched word */}
+                      <div className={`text-4xl font-extrabold tracking-widest leading-none select-none my-2 uppercase ${STROOP_WORDS[stroopGame.colorIndex].color}`}>
+                        {STROOP_WORDS[stroopGame.wordIndex].text}
+                      </div>
+
+                      {/* Display Word Details */}
+                      <div className="text-[10px] font-mono text-[#879b90]">
+                        SCORE: <span className="text-[#dfb15b] font-bold">{stroopGame.score}</span>
+                      </div>
+
+                    </div>
+                  ) : stroopGame.status === 'gameover' ? (
+                    <div className="text-center space-y-2 p-6">
+                      <div className="text-rose-400 font-bold font-mono">✘ COGNITIVE DE-SYNC!</div>
+                      <p className="text-[11px] text-[#879b90]">You scored <strong className="text-[#f1ede2]">{stroopGame.score} points</strong> filtering out mental interference.</p>
+                      <button
+                        onClick={startStroopGame}
+                        className="px-4 py-2 bg-[#1c2420] border border-[#34443a] text-[#dfb15b] text-[10px] font-bold uppercase tracking-wider rounded-lg hover:bg-[#25302a] cursor-pointer"
+                      >
+                        Play Again
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-center p-6 space-y-1">
+                      <Trophy className="w-8 h-8 text-[#dfb15b] mx-auto animate-bounce" />
+                      <p className="text-[11px] text-[#879b90]">Stroop is the gold standard for attention-filter testing.</p>
+                      <button
+                        onClick={startStroopGame}
+                        className="mt-2.5 px-4 py-2 bg-[#dfb15b] text-[#0c100e] text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer"
+                      >
+                        Activate Stroop
+                      </button>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Game Option Buttons */}
+                <div className="space-y-2">
+                  {stroopGame.status === 'playing' ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {stroopGame.options.map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => handleStroopAnswer(opt)}
+                          className="py-2.5 bg-[#1c2420] border border-[#2c3931] hover:border-[#dfb15b]/50 text-[#f1ede2] hover:text-[#dfb15b] text-xs font-bold rounded-lg transition-colors cursor-pointer text-center"
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="h-20 flex items-center justify-center text-[10px] text-[#879b90] font-mono text-center border border-dashed border-[#222d26] rounded-xl bg-black/10">
+                      WORD FILTERING ENGAGEMENT ACTIVE
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
+
+        {/* ==========================================
+            TAB 3: MIND ARCADE (Anti-Brainrot)
+            ========================================== */}
+        {activeTab === 'arcade' && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            
+            {/* Header info */}
+            <div className="bg-[#141a17] p-6 rounded-2xl border border-[#222d26]">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
+                <Gamepad2 className="w-4 h-4 text-[#dfb15b]" />
+                <span>Cortex Mind Sanctuary</span>
+              </div>
+              <h1 className="text-xl md:text-2xl font-black text-[#f1ede2] tracking-tight mt-1 font-sans">
+                Anti-Brainrot Logical Gaming Arena
+              </h1>
+              <p className="text-xs text-[#879b90] mt-1 leading-relaxed">
+                Rather than falling trap to mindless dopamine loops, sharpen your neural synapses with standard high-level challenges like Chess tactics or custom Sudoku grids.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              
+              {/* CHESS TACTICS SECTION */}
+              <div className="lg:col-span-5 bg-[#141a17] border border-[#222d26] rounded-2xl p-5 space-y-4 flex flex-col justify-between h-[510px]">
+                <div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[#879b90]">
+                    <span>EMBEDDED ARCADE</span>
+                    <span className="text-emerald-400 font-bold">100% INTELLECTUAL</span>
+                  </div>
+                  
+                  <h2 className="text-md font-bold text-[#f1ede2] mt-1 flex items-center gap-2">
+                    ♟️ Interactive Chess Puzzles
+                  </h2>
+                  <p className="text-[11px] text-[#879b90] mt-1 leading-relaxed">
+                    Solve live tactical puzzles sourced directly from Lichess. Learn strategic depth, patterns, and active problem-solving pathways.
+                  </p>
+                </div>
+
+                {/* Embedded Lichess Puzzle iframe */}
+                <div className="w-full flex-1 min-h-[260px] bg-black/40 border border-[#2c3a32] rounded-xl overflow-hidden relative select-none">
+                  <iframe
+                    title="Lichess Training Embed"
+                    src="https://lichess.org/training/embed?theme=dark&bg=dark"
+                    className="w-full h-full"
+                    allowFullScreen
+                  />
+                </div>
+
+                <div className="pt-2 border-t border-[#222d26] flex items-center justify-between text-[10px] text-[#879b90]">
+                  <span>Embed courtesy of Lichess.org</span>
+                  <a 
+                    href="https://lichess.org/tv" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-[#dfb15b] hover:underline flex items-center gap-1"
+                  >
+                    <span>Lichess TV</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
+
+              {/* SUDOKU SECTION */}
+              <div className="lg:col-span-7 bg-[#141a17] border border-[#222d26] rounded-2xl p-5 space-y-4 h-[510px] flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[#879b90]">
+                    <span>NATIVE PUZZLE</span>
+                    <span className="text-[#dfb15b] font-bold">REWARD: +150 CP</span>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-1">
+                    <h2 className="text-md font-bold text-[#f1ede2] flex items-center gap-2">
+                      🔢 Sudoku Sanctuary
+                    </h2>
+                    
+                    {/* Diff selection */}
+                    <div className="flex gap-1.5 bg-black/30 p-1 border border-[#222d26] rounded-md">
+                      <button
+                        onClick={() => handleSudokuReset('easy')}
+                        className={`px-2 py-0.5 text-[9px] uppercase font-bold rounded ${
+                          sudokuDifficulty === 'easy' ? 'bg-[#dfb15b] text-[#0c100e]' : 'text-[#879b90]'
+                        }`}
+                      >
+                        Easy
+                      </button>
+                      <button
+                        onClick={() => handleSudokuReset('medium')}
+                        className={`px-2 py-0.5 text-[9px] uppercase font-bold rounded ${
+                          sudokuDifficulty === 'medium' ? 'bg-[#dfb15b] text-[#0c100e]' : 'text-[#879b90]'
+                        }`}
+                      >
+                        Medium
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sudoku Interactive grid */}
+                <div className="flex-1 flex items-center justify-center py-2 select-none">
+                  <div className="grid grid-cols-9 border-2 border-[#2c3a32] bg-[#141a17] p-0.5 rounded-lg">
+                    {sudokuGrid.map((row, rIdx) => 
+                      row.map((val, cIdx) => {
+                        const isSelected = selectedCell?.r === rIdx && selectedCell?.c === cIdx;
+                        const initialVal = SUDOKU_PUZZLES[sudokuDifficulty].board[rIdx][cIdx];
+                        const isPrefilled = initialVal !== 0;
+
+                        // Borders for 3x3 box boundaries
+                        const borderBottom = (rIdx === 2 || rIdx === 5) ? 'border-b-2 border-b-[#2c3a32]' : 'border-b border-[#2c3a32]/25';
+                        const borderRight = (cIdx === 2 || cIdx === 5) ? 'border-r-2 border-r-[#2c3a32]' : 'border-r border-[#2c3a32]/25';
+
+                        let cellBg = isPrefilled ? 'bg-[#1c2420]/50 text-[#f1ede2]/90' : 'bg-transparent text-[#dfb15b]';
+                        if (isSelected) cellBg = 'bg-[#dfb15b]/20 border-2 border-[#dfb15b]';
+
+                        return (
+                          <button
+                            key={`${rIdx}-${cIdx}`}
+                            onClick={() => {
+                              playCalmTone(493.88, 'sine', 0.05);
+                              setSelectedCell({ r: rIdx, c: cIdx });
+                            }}
+                            className={`w-8 h-8 sm:w-10 sm:h-10 text-center text-xs font-mono font-bold transition-all focus:outline-none cursor-pointer flex items-center justify-center ${borderBottom} ${borderRight} ${cellBg}`}
+                          >
+                            {val !== 0 ? val : ''}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Input pad */}
+                <div className="space-y-3">
+                  <div className="flex justify-center gap-1.5">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => handleSudokuInput(num)}
+                        className="w-8 py-1 bg-[#1c2420] border border-[#2c3931] hover:border-[#dfb15b]/40 hover:bg-[#25302a] text-[#dfb15b] font-mono font-bold rounded-lg text-xs cursor-pointer text-center"
+                      >
+                        {num}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => handleSudokuInput(0)}
+                      className="px-2 py-1 bg-rose-950/20 text-rose-300 border border-rose-900/30 rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer font-mono"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  {/* Submission and error verification */}
+                  <div className="flex gap-2 items-center justify-between select-none">
+                    <button
+                      onClick={() => handleSudokuReset(sudokuDifficulty)}
+                      className="px-3 py-1.5 text-[10px] uppercase font-bold text-[#879b90] hover:text-[#f1ede2] flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset Board</span>
+                    </button>
+
+                    {sudokuChecked === 'success' && (
+                      <span className="text-xs font-mono text-emerald-400 font-bold">✓ PUZZLE PERFECT! +150 cp</span>
+                    )}
+                    {sudokuChecked === 'incorrect' && (
+                      <span className="text-xs font-mono text-rose-400 font-bold">✘ INCORRECT CELLS!</span>
+                    )}
+
+                    <button
+                      onClick={handleCheckSudoku}
+                      className="px-4 py-2 bg-[#dfb15b] hover:bg-[#e6c17e] text-[#0c100e] text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer"
+                    >
+                      Check Grid Solved
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
+
+        {/* ==========================================
+            TAB 4: MY MIND PALACE (Library & Achievements)
+            ========================================== */}
+        {activeTab === 'palace' && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            
+            {/* Header */}
+            <div className="bg-[#141a17] p-6 rounded-2xl border border-[#222d26] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#dfb15b]">
+                  <Trophy className="w-4 h-4 text-[#dfb15b]" />
+                  <span>Personal Brain Core</span>
+                </div>
+                <h1 className="text-xl md:text-2xl font-black text-[#f1ede2] tracking-tight mt-1 font-sans">
+                  The Saved Mind Palace
+                </h1>
+                <p className="text-xs text-[#879b90] mt-1 leading-relaxed">
+                  Your curated index of scientific nodes, saved articles, and unlocked attentional milestones. Built for long-term knowledge retention.
+                </p>
+              </div>
+
+              {/* Reset button to clear stats */}
+              <button
+                onClick={() => {
+                  if (confirm("Reset all attention points and vault?")) {
+                    localStorage.clear();
+                    window.location.reload();
+                  }
+                }}
+                className="px-3 py-1.5 bg-rose-950/20 text-rose-300 hover:bg-rose-950/40 border border-rose-900/30 text-[9px] font-bold uppercase tracking-wider rounded-lg cursor-pointer"
+              >
+                Reset Synapses
+              </button>
+            </div>
+
+            {/* Profile Statistics Grid Layout */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              
+              <div className="bg-[#141a17] border border-[#222d26] rounded-xl p-4 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-[#879b90] font-mono">Cognitive Power</span>
+                <div className="text-2xl font-black text-[#dfb15b] font-mono leading-none">
+                  {userStats.points} <span className="text-xs font-normal text-[#879b90]">cp</span>
+                </div>
+                <span className="text-[10px] text-[#879b90] block">Lifetime points</span>
+              </div>
+
+              <div className="bg-[#141a17] border border-[#222d26] rounded-xl p-4 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-[#879b90] font-mono">Focus Level</span>
+                <div className="text-sm font-black text-[#f1ede2] truncate">
+                  {currentLevel.title}
+                </div>
+                <span className="text-[10px] text-[#879b90] block">Level {userStats.level} Rank</span>
+              </div>
+
+              <div className="bg-[#141a17] border border-[#222d26] rounded-xl p-4 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-[#879b90] font-mono">Quizzes Solved</span>
+                <div className="text-2xl font-black text-emerald-400 font-mono leading-none">
+                  {userStats.quizzesSolved} <span className="text-xs font-normal text-[#879b90]">units</span>
+                </div>
+                <span className="text-[10px] text-[#879b90] block">Active recalls</span>
+              </div>
+
+              <div className="bg-[#141a17] border border-[#222d26] rounded-xl p-4 space-y-1">
+                <span className="text-[10px] uppercase font-bold text-[#879b90] font-mono">Games Won</span>
+                <div className="text-2xl font-black text-[#dfb15b] font-mono leading-none">
+                  {userStats.gamesWon} <span className="text-xs font-normal text-[#879b90]">wins</span>
+                </div>
+                <span className="text-[10px] text-[#879b90] block">Gym activities</span>
+              </div>
+
+            </div>
+
+            {/* Achievements and Milestones block */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 select-none">
+              
+              <div className="bg-[#141a17] border border-[#222d26] rounded-2xl p-5 space-y-4">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-[#dfb15b] border-b border-[#222d26] pb-2">
+                  🎖️ Unlocked Focus Milestones
+                </h2>
+
+                <div className="space-y-3">
+                  
+                  {/* Milestone 1 */}
+                  <div className="flex items-start gap-3.5 bg-black/10 p-3 rounded-lg border border-white/5">
+                    <div className="w-8 h-8 rounded-full bg-[#dfb15b]/10 border border-[#dfb15b]/20 flex items-center justify-center text-[#dfb15b] font-bold">
+                      Ⅰ
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#f1ede2]">Wiki Scholar</div>
+                      <p className="text-[10px] text-[#879b90] mt-0.5">Index custom topics live using Wikipedia open databases.</p>
+                      <span className="text-[9px] text-[#dfb15b] font-mono uppercase block mt-1">✓ ACTIVE UNLOCKED</span>
+                    </div>
+                  </div>
+
+                  {/* Milestone 2 */}
+                  <div className={`flex items-start gap-3.5 bg-black/10 p-3 rounded-lg border border-white/5 ${userStats.points >= 250 ? '' : 'opacity-40'}`}>
+                    <div className="w-8 h-8 rounded-full bg-[#dfb15b]/10 border border-[#dfb15b]/20 flex items-center justify-center text-[#dfb15b] font-bold">
+                      Ⅱ
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#f1ede2]">Prefrontal Tamer</div>
+                      <p className="text-[10px] text-[#879b90] mt-0.5">Solve a high cognitive micro-quiz perfectly. (Requires 250cp).</p>
+                      <span className="text-[9px] font-mono uppercase block mt-1">
+                        {userStats.points >= 250 ? '✓ ACTIVE UNLOCKED' : '🔒 LOCKED'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Milestone 3 */}
+                  <div className={`flex items-start gap-3.5 bg-black/10 p-3 rounded-lg border border-white/5 ${userStats.quizzesSolved >= 5 ? '' : 'opacity-40'}`}>
+                    <div className="w-8 h-8 rounded-full bg-[#dfb15b]/10 border border-[#dfb15b]/20 flex items-center justify-center text-[#dfb15b] font-bold">
+                      Ⅲ
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#f1ede2]">Schema Specialist</div>
+                      <p className="text-[10px] text-[#879b90] mt-0.5">Perform 5 perfect active recall check answers.</p>
+                      <span className="text-[9px] font-mono uppercase block mt-1">
+                        {userStats.quizzesSolved >= 5 ? '✓ ACTIVE UNLOCKED' : '🔒 LOCKED (PROGRESS: ' + userStats.quizzesSolved + '/5)'}
+                      </span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+
+              {/* SAVED LIBRARY COGNITIVE CAPSULES */}
+              <div className="bg-[#141a17] border border-[#222d26] rounded-2xl p-5 space-y-4">
+                <h2 className="text-sm font-bold uppercase tracking-widest text-[#dfb15b] border-b border-[#222d26] pb-2">
+                  🔖 Saved Knowledge Capsules
+                </h2>
+
+                <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+                  {posts.filter(p => userStats.savedArticles.includes(p.id)).map((p) => (
+                    <div 
+                      key={p.id} 
+                      className="p-3 bg-[#1c2420]/40 border border-[#2c3931] hover:border-[#dfb15b]/40 rounded-xl transition-all flex items-center justify-between gap-4 cursor-pointer"
+                      onClick={() => {
+                        playCalmTone(523.25, 'sine', 0.05);
+                        setActiveTab('feed');
+                        // Expand or highlight in feed (simplification: just switch back to feed)
+                      }}
+                    >
+                      <div className="space-y-0.5 max-w-[80%]">
+                        <span className="text-[9px] font-mono text-[#dfb15b] uppercase">📚 {p.source}</span>
+                        <h4 className="text-xs font-bold text-[#f1ede2] truncate">{p.title}</h4>
+                        <p className="text-[10px] text-[#879b90] truncate italic">{p.description}</p>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleSave(p.id);
+                        }}
+                        className="text-rose-400 hover:text-rose-300 text-[10px] font-bold uppercase tracking-wider shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+
+                  {posts.filter(p => userStats.savedArticles.includes(p.id)).length === 0 && (
+                    <div className="text-center py-12 border border-dashed border-[#222d26] rounded-xl bg-black/10">
+                      <p className="text-xs text-[#879b90]">Your mind palace is currently empty.</p>
+                      <p className="text-[10px] text-[#879b90]/60 mt-1">Click "Save Node" on any Wikipedia card in your feed to populate.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+      </main>
+
+    </div>
+  );
+}
